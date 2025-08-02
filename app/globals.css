@@ -1,0 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'PT Sans', sans-serif;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-6 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-6 rounded-lg transition-all duration-200;
+  }
+  
+  .btn-outline {
+    @apply border-2 border-primary-600 text-primary-600 hover:bg-primary-50 font-medium py-3 px-6 rounded-lg transition-all duration-200;
+  }
+  
+  .form-input {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 mb-2;
+  }
+  
+  .form-error {
+    @apply text-red-600 text-sm mt-1;
+  }
+  
+  .step-indicator {
+    @apply flex items-center justify-center w-8 h-8 rounded-full border-2 font-medium text-sm;
+  }
+  
+  .step-active {
+    @apply border-primary-600 bg-primary-600 text-white;
+  }
+  
+  .step-completed {
+    @apply border-green-500 bg-green-500 text-white;
+  }
+  
+  .step-pending {
+    @apply border-gray-300 bg-white text-gray-400;
+  }
+  
+  .quick-fill-card {
+    @apply card hover:shadow-md transition-all duration-200 cursor-pointer border-2 border-transparent hover:border-primary-200;
+  }
+  
+  .quick-fill-card.selected {
+    @apply border-primary-500 bg-primary-50;
+  }
+} 
