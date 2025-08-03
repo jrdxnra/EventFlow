@@ -30,7 +30,7 @@
     
     // Performance optimizations
     "forceConsistentCasingInFileNames": true,
-    "exactOptionalPropertyTypes": true,
+    "exactOptionalPropertyTypes": false,
     
     "plugins": [
       {

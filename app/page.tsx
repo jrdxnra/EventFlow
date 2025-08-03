@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import EventSidebar from '@/components/Sidebar';
 import { getEvents, updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
 import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar';
-import { Event } from '@/lib/types';
+import { Event as EventType } from '@/lib/types';
 
 
 interface GanttItem {
@@ -37,7 +37,7 @@ interface TimelineItem {
 }
 
 export default function Home() {
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<EventType[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'calendar' | 'gantt'>('calendar');
@@ -200,13 +200,14 @@ export default function Home() {
     }
   };
 
-  const generateTimelineForEvent = (eventData: Event): TimelineItem[] => {
+  const generateTimelineForEvent = (eventData: EventType): TimelineItem[] => {
+    // Ensure we have a valid date string
     if (!eventData.date) {
       console.warn('Event has no date, cannot generate timeline');
       return [];
     }
     
-    const eventDate = new Date(eventData.date);
+    const eventDate = new Date(eventData.date!);
     const timeline: TimelineItem[] = [];
     let idCounter = 1;
 
