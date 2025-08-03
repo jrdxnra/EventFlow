@@ -1,8 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Static export for Firebase Hosting
-  output: 'export',
-  trailingSlash: true,
+  // Static export for Firebase Hosting - only in production
+  ...(process.env.NODE_ENV === 'production' && {
+    output: 'export',
+    trailingSlash: true,
+  }),
   
   // Performance optimizations
   compress: true,
@@ -11,6 +13,10 @@ const nextConfig = {
   images: {
     domains: ['lh3.googleusercontent.com', 'drive.google.com'],
     formats: ['image/webp', 'image/avif'],
+    // Disable image optimization for static export
+    ...(process.env.NODE_ENV === 'production' && {
+      unoptimized: true,
+    }),
   },
   
   // Development experience

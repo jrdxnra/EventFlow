@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import EventSidebar from '@/components/Sidebar';
 import { getEvents, updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
 import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar';
-import { Event as EventType } from '@/lib/types';
+import { EventData } from '@/lib/types';
 
 
 interface GanttItem {
@@ -37,7 +37,7 @@ interface TimelineItem {
 }
 
 export default function Home() {
-  const [events, setEvents] = useState<EventType[]>([]);
+  const [events, setEvents] = useState<EventData[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'calendar' | 'gantt'>('calendar');
@@ -46,9 +46,9 @@ export default function Home() {
   const [collapsedEventGroups, setCollapsedEventGroups] = useState<Set<string>>(new Set());
   const [eventTimelines, setEventTimelines] = useState<Record<string, TimelineItem[]>>({});
   const [showDetailsModal, setShowDetailsModal] = useState<string | null>(null);
-  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [editingEvent, setEditingEvent] = useState<EventData | null>(null);
   const [showEventInfoModal, setShowEventInfoModal] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null);
   const [showTimelineItemModal, setShowTimelineItemModal] = useState(false);
   const [selectedTimelineItem, setSelectedTimelineItem] = useState<TimelineItem | null>(null);
   const [selectedTimelineEventId, setSelectedTimelineEventId] = useState<string>('');
@@ -59,8 +59,7 @@ export default function Home() {
     const loadEvents = async () => {
       try {
         const eventsData = await getEvents();
-        console.log('Loaded events data:', eventsData);
-        console.log('Event colors:', eventsData.map(e => ({ name: e.name, color: e.color })));
+        // Events loaded successfully
         setEvents(eventsData);
         
         // Load timeline items from Firebase for each event
@@ -200,14 +199,19 @@ export default function Home() {
     }
   };
 
-  const generateTimelineForEvent = (eventData: EventType): TimelineItem[] => {
+  const generateTimelineForEvent = (eventData: EventData): TimelineItem[] => {
     // Ensure we have a valid date string
     if (!eventData.date) {
       console.warn('Event has no date, cannot generate timeline');
       return [];
     }
     
-    const eventDate = new Date(eventData.date!);
+    // Create a valid date object - this ensures TypeScript knows it's not undefined
+    const eventDate = new Date(eventData.date);
+    if (isNaN(eventDate.getTime())) {
+      console.warn('Invalid date format, cannot generate timeline');
+      return [];
+    }
     const timeline: TimelineItem[] = [];
     let idCounter = 1;
 
@@ -217,7 +221,7 @@ export default function Home() {
         id: `${eventData.id}-${idCounter++}`,
         title: 'Create Social Media Content',
         description: 'Design and schedule social media posts for event promotion',
-        dueDate: new Date(eventDate.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days before
+        dueDate: new Date(eventDate.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] || '', // 30 days before
         dueTime: '07:00',
         category: 'marketing',
         status: 'pending',
@@ -230,7 +234,7 @@ export default function Home() {
         id: `${eventData.id}-${idCounter++}`,
         title: 'Design and Print Flyers',
         description: 'Create event flyers and arrange printing',
-        dueDate: new Date(eventDate.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days before
+        dueDate: new Date(eventDate.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] || '', // 30 days before
         dueTime: '07:00',
         category: 'marketing',
         status: 'pending',
@@ -244,7 +248,7 @@ export default function Home() {
         id: `${eventData.id}-${idCounter++}`,
         title: 'Submit GEMS Ticket',
         description: `Request: ${eventData.gemsDetails || 'Tables, chairs, and supplies'}`,
-        dueDate: new Date(eventDate.getTime() - 21 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 21 days before (3 weeks)
+        dueDate: new Date(eventDate.getTime() - 21 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] || '', // 21 days before (3 weeks)
         dueTime: '07:00',
         category: 'logistics',
         status: 'pending',
@@ -258,7 +262,7 @@ export default function Home() {
         id: `${eventData.id}-${idCounter++}`,
         title: 'Send Email Campaign',
         description: 'Send promotional emails to target audience',
-        dueDate: new Date(eventDate.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 14 days before (2 weeks)
+        dueDate: new Date(eventDate.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] || '', // 14 days before (2 weeks)
         dueTime: '07:00',
         category: 'marketing',
         status: 'pending',
@@ -271,7 +275,7 @@ export default function Home() {
       id: `${eventData.id}-${idCounter++}`,
       title: 'Prepare Event Materials',
       description: 'Gather all materials, signage, and equipment',
-      dueDate: new Date(eventDate.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days before
+      dueDate: new Date(eventDate.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] || '', // 7 days before
       dueTime: '07:00',
       category: 'preparation',
       status: 'pending',
@@ -282,7 +286,7 @@ export default function Home() {
       id: `${eventData.id}-${idCounter++}`,
       title: 'Final Venue Walkthrough',
       description: 'Visit venue to confirm setup and logistics',
-      dueDate: new Date(eventDate.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 3 days before
+      dueDate: new Date(eventDate.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] || '', // 3 days before
       dueTime: '07:00',
       category: 'logistics',
       status: 'pending',
@@ -293,7 +297,7 @@ export default function Home() {
       id: `${eventData.id}-${idCounter++}`,
       title: 'Team Briefing',
       description: 'Meet with team to review roles and responsibilities',
-      dueDate: new Date(eventDate.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 day before
+      dueDate: new Date(eventDate.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] || '', // 1 day before
       dueTime: '07:00',
       category: 'preparation',
       status: 'pending',
@@ -340,17 +344,17 @@ export default function Home() {
       const newSet = new Set(prev);
       if (newSet.has(eventId)) {
         newSet.delete(eventId);
-        console.log(`Expanded event group: ${eventId}`);
+        // Event group expanded
       } else {
         newSet.add(eventId);
-        console.log(`Collapsed event group: ${eventId}`);
+        // Event group collapsed
         
         // When collapsing an event group, also collapse its timeline if it's expanded
         setExpandedTimelines(prevTimelines => {
           const newTimelineSet = new Set(prevTimelines);
           if (newTimelineSet.has(eventId)) {
             newTimelineSet.delete(eventId);
-            console.log(`Auto-collapsed timeline for event: ${eventId}`);
+            // Auto-collapsed timeline for event
           }
           return newTimelineSet;
         });
@@ -359,9 +363,8 @@ export default function Home() {
     });
   };
 
-  const openDetailsModal = (event: Event) => {
-    console.log('Opening event details:', event);
-    console.log('Event color:', event.color);
+  const openDetailsModal = (event: EventData) => {
+    // Opening event details modal
     setEditingEvent({ ...event });
     setShowDetailsModal(event.id);
   };
@@ -371,7 +374,7 @@ export default function Home() {
     setEditingEvent(null);
   };
 
-  const openEventInfoModal = (event: Event) => {
+  const openEventInfoModal = (event: EventData) => {
     setSelectedEvent(event);
     setShowEventInfoModal(true);
   };
@@ -404,7 +407,7 @@ export default function Home() {
       setEvents(eventsData);
       
       closeEventInfoModal();
-      console.log('Event updated successfully');
+      // Event updated successfully
     } catch (error) {
       console.error('Error updating event:', error);
       alert('Failed to update event. Please try again.');
@@ -433,7 +436,7 @@ export default function Home() {
       await updateEventTimelineItem(selectedTimelineEventId, updatedTimeline);
       
       closeTimelineItemModal();
-      console.log('Timeline item updated successfully');
+      // Timeline item updated successfully
     } catch (error) {
       console.error('Error updating timeline item:', error);
       alert('Failed to update timeline item. Please try again.');
@@ -540,7 +543,7 @@ export default function Home() {
     // Only include timeline items from expanded events (dash doesn't affect Gantt chart)
     events.forEach(event => {
       if (expandedTimelines.has(event.id) && eventTimelines[event.id]) {
-        eventTimelines[event.id].forEach(timelineItem => {
+        eventTimelines[event.id]?.forEach(timelineItem => {
           const startDate = new Date(timelineItem.dueDate + ' ' + timelineItem.dueTime);
           const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // 2 hour duration default
           
@@ -850,30 +853,30 @@ export default function Home() {
                               
                           try {
                             const jsonData = e.dataTransfer.getData('application/json');
-                            console.log('Drop data received:', jsonData);
+                            // Drop data received
                                 
                             if (!jsonData) {
-                              console.log('No drag data found');
+                              // No drag data found
                               return;
                             }
                                 
                             const data = JSON.parse(jsonData);
-                            console.log('Parsed drag data:', data);
+                            // Parsed drag data
                                 
-                            const { eventId, eventType, originalDate, timelineItemId } = data;
+                            const { eventId, eventType, timelineItemId } = data;
                             const targetDate = date.toISOString().split('T')[0];
-                            console.log('Target date:', targetDate, 'Original date:', originalDate);
+                            // Processing date change
                                
                             if (eventType === 'timeline') {
                               // Handle timeline item drag
                               const timeline = eventTimelines[eventId];
                               if (!timeline) {
-                                console.log('Timeline not found for event:', eventId);
+                                // Timeline not found for event
                                 return;
                               }
                                   
                               const updatedTimeline = timeline.map(t => 
-                                t.id === timelineItemId ? { ...t, dueDate: targetDate } : t
+                                t.id === timelineItemId ? { ...t, dueDate: targetDate || '' } : t
                               );
                                 
                               // Update local state
@@ -884,28 +887,28 @@ export default function Home() {
                                 
                               // Persist to Firebase
                               await updateEventTimelineItem(eventId, updatedTimeline);
-                              console.log(`Timeline item moved to ${targetDate}`);
+                              // Timeline item moved
                             } else {
                               // Handle regular event drag
-                              console.log('Handling regular event drag');
+                              // Handling regular event drag
                               const event = events.find(e => e.id === eventId);
                               if (!event) {
-                                console.log('Event not found:', eventId);
+                                // Event not found
                                 return;
                               }
                                 
-                              console.log('Found event:', event.name, 'Current date:', event.date);
+                              // Found event for date update
                                 
                               // Update event date
                               const updatedEvent = { ...event, date: targetDate };
-                              console.log('Updating event with new date:', targetDate);
+                              // Updating event with new date
                               await updateEvent(eventId, updatedEvent);
                                 
                               // Refresh events
-                              console.log('Refreshing events...');
+                              // Refreshing events
                               const eventsData = await getEvents();
                               setEvents(eventsData);
-                              console.log(`Event moved to ${targetDate}`);
+                              // Event moved successfully
                             }
                           } catch (error) {
                             console.error('Error dropping event:', error);
@@ -939,7 +942,7 @@ export default function Home() {
                                     });
                                     return parentEvent?.color || '#10B981';
                                   })()
-                                  : ((event as Event).color || '#10B981'),
+                                  : ((event as EventData).color || '#10B981'),
                                 color: '#FFFFFF',
                               }}
                               draggable
@@ -953,7 +956,7 @@ export default function Home() {
                                     
                                   if (parentEvent) {
                                     const timeline = eventTimelines[parentEvent.id];
-                                    const timelineItem = timeline.find(t => t.dueDate === event.date && t.title === event.name);
+                                    const timelineItem = timeline?.find(t => t.dueDate === event.date && t.title === event.name);
                                       
                                     const dragData = { 
                                       eventId: parentEvent.id,
@@ -962,7 +965,7 @@ export default function Home() {
                                       originalDate: event.date,
                                       eventName: event.name,
                                     };
-                                    console.log('Timeline drag started with data:', dragData);
+                                    // Timeline drag started
                                     e.dataTransfer.setData('application/json', JSON.stringify(dragData));
                                     e.dataTransfer.effectAllowed = 'move';
                                   }
@@ -974,7 +977,7 @@ export default function Home() {
                                     originalDate: event.date,
                                     eventName: event.name,
                                   };
-                                  console.log('Event drag started with data:', dragData);
+                                  // Event drag started
                                   e.dataTransfer.setData('application/json', JSON.stringify(dragData));
                                   e.dataTransfer.effectAllowed = 'move';
                                 }
@@ -988,7 +991,7 @@ export default function Home() {
                                   });
                                   if (parentEvent) {
                                     const timeline = eventTimelines[parentEvent.id];
-                                    const timelineItem = timeline.find(t => t.dueDate === event.date && t.title === event.name);
+                                    const timelineItem = timeline?.find(t => t.dueDate === event.date && t.title === event.name);
                                     if (timelineItem) {
                                       openTimelineItemModal(timelineItem, parentEvent.id);
                                     }

@@ -10,7 +10,7 @@ import {
 import Link from 'next/link';
 import { Sidebar, Menu as ProMenu, MenuItem } from 'react-pro-sidebar';
 
-import { Event } from '@/lib/types';
+import { EventData } from '@/lib/types';
 
 interface TimelineItem {
   id: string
@@ -26,7 +26,7 @@ interface TimelineItem {
 }
 
 interface EventSidebarProps {
-  events: Event[]
+  events: EventData[]
   isLoading: boolean
   expandedTimelines: Set<string>
   collapsedEventGroups: Set<string>
@@ -34,7 +34,7 @@ interface EventSidebarProps {
   collapsed: boolean
   onToggleTimeline: (eventId: string) => void
   onToggleEventGroup: (eventId: string) => void
-  onOpenDetailsModal: (event: Event) => void
+  onOpenDetailsModal: (event: EventData) => void
   onTimelineItemClick: (eventId: string, item: TimelineItem) => void
 
   onToggleCollapsed: () => void
@@ -75,7 +75,7 @@ export default function EventSidebar({
 
 
 
-  const EventCard = ({ event }: { event: Event }) => (
+  const EventCard = ({ event }: { event: EventData }) => (
     <motion.div
       key={event.id}
       initial={{ opacity: 0, x: -20 }}
@@ -187,7 +187,7 @@ export default function EventSidebar({
                 backgroundColor: event.color ? `${event.color}05` : '#f9fafb',
               }}
             >
-              {eventTimelines[event.id].map((item) => (
+              {eventTimelines[event.id]?.map((item) => (
                 <div 
                   key={item.id} 
                   className="p-1.5 rounded border relative cursor-pointer hover:shadow-sm transition-shadow"

@@ -11,7 +11,7 @@ export interface TimelineItem {
   notes?: string
 }
 
-export interface Event {
+export interface EventData {
   id: string
   name: string
   date: string

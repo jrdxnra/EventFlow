@@ -1,13 +1,13 @@
 import { collection, addDoc, updateDoc, doc, getDocs, query, orderBy, getDoc } from 'firebase/firestore';
 
 import { db } from './firebase';
-import { Event, TimelineItem } from './types';
+import { EventData, TimelineItem } from './types';
 import { EventFormData } from './validation';
 
 export const createEvent = async (formData: EventFormData): Promise<string> => {
   try {
     // Transform EventFormData to Event interface
-    const eventData: Omit<Event, 'id' | 'createdAt' | 'updatedAt'> = {
+    const eventData: Omit<EventData, 'id' | 'createdAt' | 'updatedAt'> = {
       name: formData.eventName,
       date: formData.eventDate,
       time: formData.eventTime,
@@ -50,7 +50,7 @@ export const createEvent = async (formData: EventFormData): Promise<string> => {
   }
 };
 
-export const updateEvent = async (eventId: string, eventData: Partial<Event>): Promise<void> => {
+export const updateEvent = async (eventId: string, eventData: Partial<EventData>): Promise<void> => {
   try {
     const eventRef = doc(db, 'events', eventId);
     await updateDoc(eventRef, {
@@ -63,21 +63,21 @@ export const updateEvent = async (eventId: string, eventData: Partial<Event>): P
   }
 };
 
-export const getEvents = async (): Promise<Event[]> => {
+export const getEvents = async (): Promise<EventData[]> => {
   try {
     const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-    })) as Event[];
+    })) as EventData[];
   } catch (error) {
     console.error('Error getting events:', error);
     throw new Error('Failed to get events');
   }
 };
 
-export const getEventById = async (eventId: string): Promise<Event | null> => {
+export const getEventById = async (eventId: string): Promise<EventData | null> => {
   try {
     const eventRef = doc(db, 'events', eventId);
     const eventDoc = await getDoc(eventRef);
@@ -86,7 +86,7 @@ export const getEventById = async (eventId: string): Promise<Event | null> => {
       return {
         id: eventDoc.id,
         ...eventDoc.data(),
-      } as Event;
+      } as EventData;
     }
     return null;
   } catch (error) {

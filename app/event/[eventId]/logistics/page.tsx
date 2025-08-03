@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
 import { getEventById } from '@/lib/firebase-events';
-import { Event } from '@/lib/types';
+import { EventData } from '@/lib/types';
 
 interface TeamMember {
   id: string
@@ -53,7 +53,7 @@ export default function EventLogistics() {
   const params = useParams();
   const eventId = params.eventId as string;
   
-  const [event, setEvent] = useState<Event | null>(null);
+  const [event, setEvent] = useState<EventData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'team' | 'activities' | 'schedule' | 'contacts'>('team');
   
@@ -161,7 +161,7 @@ export default function EventLogistics() {
     loadEvent();
   }, [eventId]);
 
-  const generateDefaultTeam = (eventData: Event) => {
+  const generateDefaultTeam = (eventData: EventData) => {
     const defaultTeam: TeamMember[] = [
       {
         id: '1',
@@ -203,7 +203,7 @@ export default function EventLogistics() {
     setTeamMembers(defaultTeam);
   };
 
-  const generateDefaultActivities = (eventData: Event) => {
+  const generateDefaultActivities = (eventData: EventData) => {
     const defaultActivities: EventActivity[] = [
       {
         id: '1',
@@ -229,7 +229,7 @@ export default function EventLogistics() {
     setActivities(defaultActivities);
   };
 
-  const generateDefaultSchedule = (eventData: Event) => {
+  const generateDefaultSchedule = (eventData: EventData) => {
     const eventTime = new Date(`${eventData.date}T${eventData.time}`);
     const defaultSchedule: DayOfSchedule[] = [
       {

@@ -92,8 +92,9 @@ export const formatTimeForCalendar = (time: string): string => {
   // Convert 12-hour format to 24-hour format if needed
   if (time.includes('AM') || time.includes('PM')) {
     const [timePart, period] = time.split(' ');
+    if (!timePart) return time;
     const [hours, minutes] = timePart.split(':');
-    let hour = parseInt(hours);
+    let hour = parseInt(hours || '0');
     
     if (period === 'PM' && hour !== 12) {
       hour += 12;
