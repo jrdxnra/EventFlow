@@ -970,9 +970,9 @@ export default function EventSetup() {
         <div className="card">
           <div className="mb-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              {formSteps[currentStep - 1].title}
+              {formSteps[currentStep - 1]?.title || 'Step'}
             </h2>
-            <p className="text-gray-600">{formSteps[currentStep - 1].description}</p>
+            <p className="text-gray-600">{formSteps[currentStep - 1]?.description || ''}</p>
           </div>
 
           <AnimatePresence mode="wait">

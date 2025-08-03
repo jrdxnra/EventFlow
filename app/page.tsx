@@ -1,61 +1,59 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Calendar, Users, Target, TrendingUp, CheckCircle, Clock, MapPin, FileText, Zap, Plus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, BarChart3, RefreshCw, Settings, GripVertical, CalendarPlus, Minus, Square } from 'lucide-react'
-import Link from 'next/link'
-import { getEvents, getEventById, updateEvent, updateEventTimelineItem } from '@/lib/firebase-events'
-import { Event } from '@/lib/types'
-import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar'
-import EventSidebar from '@/components/Sidebar'
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Calendar, Target, TrendingUp, CheckCircle, FileText, Zap, Plus, ChevronLeft, ChevronRight, BarChart3, RefreshCw, GripVertical, CalendarPlus } from 'lucide-react';
+import Link from 'next/link';
+
+import { getEvents, updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
+import { Event } from '@/lib/types';
+import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar';
+import EventSidebar from '@/components/Sidebar';
 
 
 interface GanttItem {
-  id: string
-  eventId: string
-  eventName: string
-  task: string
-  start: Date
-  end: Date
-  category: 'marketing' | 'logistics' | 'preparation' | 'execution'
-  status: 'pending' | 'completed'
-  eventColor: string
+  id: string;
+  eventId: string;
+  eventName: string;
+  task: string;
+  start: Date;
+  end: Date;
+  category: 'marketing' | 'logistics' | 'preparation' | 'execution';
+  status: 'pending' | 'completed';
+  eventColor: string;
 }
 
 interface TimelineItem {
-  id: string
-  title: string
-  description: string
-  dueDate: string
-  dueTime: string
-  category: 'marketing' | 'logistics' | 'preparation' | 'execution'
-  status: 'pending' | 'confirmed' | 'completed'
-  priority: 'high' | 'medium' | 'low'
-  assignedTo?: string
-  notes?: string
+  id: string;
+  title: string;
+  description: string;
+  dueDate: string;
+  dueTime: string;
+  category: 'marketing' | 'logistics' | 'preparation' | 'execution';
+  status: 'pending' | 'confirmed' | 'completed';
+  priority: 'high' | 'medium' | 'low';
+  assignedTo?: string;
+  notes?: string;
 }
 
-
-
 export default function Home() {
-  const [events, setEvents] = useState<Event[]>([])
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [isLoading, setIsLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<'calendar' | 'gantt'>('calendar')
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [expandedTimelines, setExpandedTimelines] = useState<Set<string>>(new Set())
-  const [collapsedEventGroups, setCollapsedEventGroups] = useState<Set<string>>(new Set())
-  const [eventTimelines, setEventTimelines] = useState<Record<string, TimelineItem[]>>({})
-  const [showDetailsModal, setShowDetailsModal] = useState<string | null>(null)
-  const [editingEvent, setEditingEvent] = useState<Event | null>(null)
-  const [showEventInfoModal, setShowEventInfoModal] = useState(false)
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  const [showTimelineItemModal, setShowTimelineItemModal] = useState(false)
-  const [selectedTimelineItem, setSelectedTimelineItem] = useState<TimelineItem | null>(null)
-  const [selectedTimelineEventId, setSelectedTimelineEventId] = useState<string>('')
-  const [confirmedTimelineItems, setConfirmedTimelineItems] = useState<Set<string>>(new Set())
-  const [isSyncing, setIsSyncing] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [events, setEvents] = useState<Event[]>([]);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [isLoading, setIsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'calendar' | 'gantt'>('calendar');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [expandedTimelines, setExpandedTimelines] = useState<Set<string>>(new Set());
+  const [collapsedEventGroups, setCollapsedEventGroups] = useState<Set<string>>(new Set());
+  const [eventTimelines, setEventTimelines] = useState<Record<string, TimelineItem[]>>({});
+  const [showDetailsModal, setShowDetailsModal] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [showEventInfoModal, setShowEventInfoModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [showTimelineItemModal, setShowTimelineItemModal] = useState(false);
+  const [selectedTimelineItem, setSelectedTimelineItem] = useState<TimelineItem | null>(null);
+  const [selectedTimelineEventId, setSelectedTimelineEventId] = useState<string>('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -148,23 +146,10 @@ export default function Home() {
     return [...eventEvents, ...timelineEvents]
   }
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric' 
-    })
-  }
-
   const isToday = (date: Date) => {
-    const today = new Date()
-    return date.toDateString() === today.toDateString()
-  }
-
-  const isCurrentMonth = (date: Date) => {
-    const current = new Date()
-    return date.getMonth() === current.getMonth() && date.getFullYear() === current.getFullYear()
-  }
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
     setCurrentDate(prev => {
@@ -424,10 +409,13 @@ export default function Home() {
     if (!selectedTimelineItem || !selectedTimelineEventId) return
 
     try {
-      const timeline = eventTimelines[selectedTimelineEventId]
+      const timeline = eventTimelines[selectedTimelineEventId];
+      if (!timeline) {
+        throw new Error('Timeline not found');
+      }
       const updatedTimeline = timeline.map(t => 
         t.id === selectedTimelineItem.id ? selectedTimelineItem : t
-      )
+      );
       
       // Update local state
       setEventTimelines(prev => ({
@@ -537,15 +525,15 @@ export default function Home() {
   const confirmTimelineItem = async (eventId: string, itemId: string) => {
     const event = events.find(e => e.id === eventId)
     const timeline = eventTimelines[eventId]
-    const item = timeline?.find(t => t.id === itemId)
+    const item = timeline?.find(t => t.id === itemId);
     
-    if (!event || !item) return
+    if (!event || !item || !timeline) return;
 
     try {
       // Update timeline status immediately for better UX
       const updatedTimeline = timeline.map(t => 
         t.id === itemId ? { ...t, status: 'confirmed' as const } : t
-      )
+      );
       
       setEventTimelines(prev => ({
         ...prev,
@@ -573,47 +561,7 @@ export default function Home() {
     }
   }
 
-  const DraggableTimelineItem = ({ item, eventId }: { item: TimelineItem; eventId: string }) => {
-    return (
-      <div 
-        className="p-2 bg-white rounded border hover:shadow-md transition-shadow"
-      >
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center space-x-2">
-            <GripVertical className="h-3 w-3 text-gray-400" />
-            <div className={`p-0.5 rounded ${getCategoryColor(item.category)}`}>
-              {getCategoryIcon(item.category)}
-            </div>
-            <span className="text-xs font-medium text-gray-900">{item.title}</span>
-          </div>
-          <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(item.priority)}`}>
-            {item.priority}
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="text-xs text-gray-500">
-            {item.dueDate} at {item.dueTime}
-          </div>
-          {item.status === 'pending' ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                confirmTimelineItem(eventId, item.id)
-              }}
-              className="px-2 py-1 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700"
-            >
-              Confirm
-            </button>
-          ) : (
-            <div className="flex items-center space-x-1 text-green-600">
-              <CheckCircle className="h-3 w-3" />
-              <span className="text-xs font-medium">Confirmed</span>
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
+
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
