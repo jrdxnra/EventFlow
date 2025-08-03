@@ -838,28 +838,12 @@ export default function EventSetup() {
                  </div>
 
             <div className="space-y-4">
-                          <button
-                              onClick={() => window.location.href = `/event/${createdEventId}/logistics`}
-              className="w-full bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-            >
-                              Setup Day-of Logistics
-            </button>
-              
-              <div className="flex space-x-4">
-                <button
-                  onClick={resetForm}
-                  className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-lg font-medium hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                >
-                  Create Another Event
-                </button>
-                
-                <button
-                  onClick={() => window.location.href = '/'}
-                  className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-lg font-medium hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                >
-                  Back to Home
-                </button>
-              </div>
+              <button
+                onClick={() => window.location.href = `/event/${createdEventId}/logistics`}
+                className="w-full bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                Setup Day-of Logistics
+              </button>
             </div>
 
             <div className="mt-6 text-sm text-gray-500">

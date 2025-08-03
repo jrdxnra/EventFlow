@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { getEvents, getEventById, updateEvent, updateEventTimelineItem } from '@/lib/firebase-events'
 import { Event } from '@/lib/types'
 import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar'
+import EventSidebar from '@/components/Sidebar'
 
 
 interface GanttItem {
@@ -54,6 +55,7 @@ export default function Home() {
   const [selectedTimelineEventId, setSelectedTimelineEventId] = useState<string>('')
   const [confirmedTimelineItems, setConfirmedTimelineItems] = useState<Set<string>>(new Set())
   const [isSyncing, setIsSyncing] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -351,6 +353,16 @@ export default function Home() {
       } else {
         newSet.add(eventId)
         console.log(`Collapsed event group: ${eventId}`)
+        
+        // When collapsing an event group, also collapse its timeline if it's expanded
+        setExpandedTimelines(prevTimelines => {
+          const newTimelineSet = new Set(prevTimelines)
+          if (newTimelineSet.has(eventId)) {
+            newTimelineSet.delete(eventId)
+            console.log(`Auto-collapsed timeline for event: ${eventId}`)
+          }
+          return newTimelineSet
+        })
       }
       return newSet
     })
@@ -697,6 +709,47 @@ export default function Home() {
     return abbreviations[title] || title.length > 20 ? title.substring(0, 20) + '...' : title
   }
 
+  const getWeekGridLines = () => {
+    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+    const totalDays = endOfMonth.getDate()
+    const weeks = []
+    
+    for (let day = 1; day <= totalDays; day += 7) {
+      const weekStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
+      const weekEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), Math.min(day + 6, totalDays))
+      
+      const weekStartPercent = ((weekStart.getTime() - startOfMonth.getTime()) / (endOfMonth.getTime() - startOfMonth.getTime())) * 100
+      const weekEndPercent = ((weekEnd.getTime() - startOfMonth.getTime()) / (endOfMonth.getTime() - startOfMonth.getTime())) * 100
+      
+      // Get the actual week number of the year
+      const weekNumber = getWeekNumber(weekStart)
+      
+      weeks.push({
+        start: weekStartPercent,
+        end: weekEndPercent,
+        label: `Week ${weekNumber}`
+      })
+    }
+    
+    return weeks
+  }
+
+  const getWeekNumber = (date: Date) => {
+    // Get the first Thursday of the year
+    const firstDayOfYear = new Date(date.getFullYear(), 0, 1)
+    const firstThursday = new Date(firstDayOfYear)
+    firstThursday.setDate(firstDayOfYear.getDate() + (4 - firstDayOfYear.getDay() + 7) % 7)
+    
+    // Get the first day of the week containing the first Thursday
+    const firstWeekStart = new Date(firstThursday)
+    firstWeekStart.setDate(firstThursday.getDate() - 3)
+    
+    // Calculate the week number
+    const daysDiff = (date.getTime() - firstWeekStart.getTime()) / (1000 * 60 * 60 * 24)
+    return Math.floor(daysDiff / 7) + 1
+  }
+
   const { daysInMonth, startingDayOfWeek } = getDaysInMonth(currentDate)
   const currentYear = new Date().getFullYear()
   const monthName = currentDate.getFullYear() === currentYear 
@@ -710,257 +763,61 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-gradient-to-r from-primary-600 to-indigo-600 rounded-lg">
-                  <Calendar className="h-6 w-6 text-white" />
+        <div className="flex">
+          {/* Header content aligned with sidebar */}
+          <div className="w-[225px] flex-shrink-0 hidden lg:block"></div>
+          <div className="flex-1 pr-4 sm:pr-6 lg:pr-8">
+            <div className="flex justify-between items-center py-6">
+              <div className="flex items-center">
+                <div className="flex items-center space-x-2">
+                  <div className="p-2 bg-gradient-to-r from-primary-600 to-indigo-600 rounded-lg">
+                    <Calendar className="h-6 w-6 text-white" />
+                  </div>
+                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EventFlow</h1>
                 </div>
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EventFlow</h1>
               </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={refreshEvents}
-                disabled={isRefreshing}
-                className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
-                title="Refresh events"
-              >
-                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </button>
-              <Link href="/event-setup" className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors">
-                <CalendarPlus className="h-4 w-4" />
-              </Link>
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={refreshEvents}
+                  disabled={isRefreshing}
+                  className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
+                  title="Refresh events"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                </button>
+                <Link href="/event-setup" className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors">
+                  <CalendarPlus className="h-4 w-4" />
+                </Link>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="px-0 py-8">
-        <div className="grid grid-cols-[minmax(175px,280px)_1fr] gap-0">
-          {/* Upcoming Events - Left Sidebar */}
-                      <div className="sm:col-span-1">
-              <div className="bg-white shadow-sm border-r sticky top-8 h-screen">
-                              <div className="p-3 border-b">
-                <h3 className="text-lg font-semibold text-gray-900">Upcoming Events</h3>
-              </div>
-                              <div className="p-3">
-                {isLoading ? (
-                  <div className="text-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto mb-2"></div>
-                    <p className="text-sm text-gray-600">Loading events...</p>
-                  </div>
-                ) : events.length === 0 ? (
-                  <div className="text-center py-4">
-                    <Calendar className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                    <h4 className="text-sm font-medium text-gray-900 mb-1">No events yet</h4>
-                    <p className="text-xs text-gray-600 mb-3">Create your first event to get started</p>
-                    <Link href="/event-setup" className="btn-primary text-sm px-3 py-1">
-                      <Plus className="h-3 w-3 mr-1" />
-                      Create Event
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {events
-                      .filter(event => new Date(event.date) >= new Date())
-                      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                      .slice(0, 8)
-                      .map((event) => (
-                        <motion.div
-                          key={event.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          className="border rounded-lg overflow-hidden"
-                          style={{
-                            backgroundColor: event.color ? `${event.color}15` : '#f8f9fa',
-                            borderLeftColor: event.color || '#e5e7eb',
-                            borderLeftWidth: '4px'
-                          }}
-                          title={`Event color: ${event.color || 'default'}`}
-                        >
-                          {collapsedEventGroups.has(event.id) ? (
-                            /* Collapsed State - Just the dash icon and event name */
-                            <div 
-                              className="p-2 relative"
-                              style={{
-                                backgroundColor: event.color ? `${event.color}10` : '#f8f9fa',
-                                borderLeftColor: event.color || '#e5e7eb',
-                                borderLeftWidth: '3px'
-                              }}
-                            >
-                              <button
-                                onClick={() => toggleEventGroup(event.id)}
-                                className="absolute top-0 left-0 p-1 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors z-10 font-bold"
-                                title="Expand event group"
-                              >
-                                <Square className="h-3 w-3" />
-                              </button>
-                              <div className="pl-6">
-                                <div className="text-xs text-gray-500 truncate">{event.name}</div>
-                              </div>
-                            </div>
-                          ) : (
-                            /* Expanded State - Full event card */
-                            <>
-                              {/* Event Header */}
-                              <div className="p-3 relative">
-                                {/* Collapse/Expand Icon - positioned absolutely */}
-                                <button
-                                  onClick={() => toggleEventGroup(event.id)}
-                                  className="absolute top-0 left-0 p-1 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors z-10 font-bold"
-                                  title="Collapse event group"
-                                >
-                                  <Minus className="h-3 w-3" />
-                                </button>
-                                <div className="flex items-start space-x-3">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-gray-900">
-                                  {formatDate(new Date(event.date))} at {event.time}
-                                </p>
-                                <h4 className="font-medium text-gray-900 text-sm truncate">{event.name}</h4>
-                                <p className="text-xs text-gray-500 truncate">{event.location}</p>
-                                <div className="text-xs text-gray-600 mt-1">
-                                  {(() => {
-                                    const eventDate = new Date(event.date + ' ' + event.time)
-                                    const now = new Date()
-                                    const diffTime = eventDate.getTime() - now.getTime()
-                                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-                                    
-                                    if (diffDays < 0) {
-                                      return <span className="text-red-600">Event passed</span>
-                                    } else if (diffDays === 0) {
-                                      const diffHours = Math.ceil(diffTime / (1000 * 60 * 60))
-                                      if (diffHours <= 0) {
-                                        return <span className="text-green-600 font-medium">Today!</span>
-                                      } else {
-                                        return <span className="text-orange-600">{diffHours}h away</span>
-                                      }
-                                    } else if (diffDays === 1) {
-                                      return <span className="text-orange-600">Tomorrow</span>
-                                    } else if (diffDays <= 7) {
-                                      return <span className="text-blue-600">{diffDays} days</span>
-                                    } else {
-                                      const diffWeeks = Math.ceil(diffDays / 7)
-                                      return <span className="text-gray-600">{diffWeeks} week{diffWeeks > 1 ? 's' : ''}</span>
-                                    }
-                                  })()}
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end space-y-1">
-                                <button
-                                  onClick={() => openDetailsModal(event)}
-                                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                                  title="Edit event details"
-                                >
-                                  <Settings className="h-3 w-3" />
-                                </button>
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  event.status === 'draft' ? 'bg-yellow-100 text-yellow-800' :
-                                  event.status === 'active' ? 'bg-green-100 text-green-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {event.status}
-                                </span>
-                                <button
-                                  onClick={() => toggleTimelineExpanded(event.id)}
-                                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                                  title="Toggle timeline"
-                                >
-                                  {expandedTimelines.has(event.id) ? (
-                                    <ChevronDown className="h-3 w-3" />
-                                  ) : (
-                                    <ChevronRight className="h-3 w-3" />
-                                  )}
-                                </button>
+      <main className="flex h-[calc(100vh-88px)] overflow-hidden">
+        {/* Sidebar */}
+        <div className={`flex-shrink-0 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'w-[60px]' : 'w-[225px]'}`}>
+          <EventSidebar
+            events={events}
+            isLoading={isLoading}
+            expandedTimelines={expandedTimelines}
+            collapsedEventGroups={collapsedEventGroups}
+            eventTimelines={eventTimelines}
+            collapsed={sidebarCollapsed}
+            onToggleTimeline={toggleTimelineExpanded}
+            onToggleEventGroup={toggleEventGroup}
+            onOpenDetailsModal={openDetailsModal}
+            onTimelineItemClick={(eventId, item) => openTimelineItemModal(item, eventId)}
+            onConfirmTimelineItem={confirmTimelineItem}
+            onToggleCollapsed={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
+        </div>
 
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Timeline Tasks */}
-                          {expandedTimelines.has(event.id) && eventTimelines[event.id] && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.2 }}
-                              className="border-t p-2 space-y-1.5"
-                              style={{
-                                backgroundColor: event.color ? `${event.color}05` : '#f9fafb'
-                              }}
-                            >
-                              {eventTimelines[event.id].map((item) => (
-                                <div 
-                                  key={item.id} 
-                                  className="p-1.5 rounded border relative"
-                                  style={{
-                                    backgroundColor: event.color ? `${event.color}15` : '#f8f9fa',
-                                    borderLeftColor: event.color || '#e5e7eb',
-                                    borderLeftWidth: '4px'
-                                  }}
-                                  title={`Timeline item color: ${event.color || 'default'} - Event: ${event.name}`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                                                                                      <div className="flex items-center space-x-2 flex-1 min-w-0">
-                                      <span className="text-xs font-medium text-gray-900 truncate" title={item.title}>
-                                        {abbreviateTitle(item.title)}
-                                      </span>
-                                      <div 
-                                        className="w-2 h-2 rounded-full flex-shrink-0"
-                                        style={{ backgroundColor: event.color || '#10B981' }}
-                                        title={event.name}
-                                      />
-                                    </div>
-                                    <div className="flex items-center space-x-2 flex-shrink-0">
-                                      <span className={`px-1 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(item.priority)}`}>
-                                        {item.priority}
-                                      </span>
-                                      {item.status === 'pending' ? (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            confirmTimelineItem(event.id, item.id)
-                                          }}
-                                          className="px-2 py-0.5 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700"
-                                        >
-                                          Confirm
-                                        </button>
-                                      ) : (
-                                        <div className="flex items-center space-x-1 text-green-600">
-                                          <CheckCircle className="h-3 w-3" />
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center justify-between mt-1">
-                                    <div className="text-xs text-gray-600">
-                                      {item.dueDate} at {item.dueTime}
-                                    </div>
-                                    <div className="text-xs text-gray-500 truncate max-w-20" title={event.name}>
-                                      {event.name}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </motion.div>
-                          )}
-                            </>
-                          )}
-                        </motion.div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Calendar/Timeline - Main Content */}
-          <div className="sm:col-span-1">
-            <div className="bg-white shadow-sm">
-              <div className="p-6 border-b">
+        {/* Calendar/Timeline - Main Content */}
+        <div className="flex-1 overflow-hidden relative ml-0 transition-all duration-300 ease-in-out">
+          <div className="bg-white shadow-sm h-full w-full">
+            <div className={`pr-4 sm:pr-6 lg:pr-8 py-2.5 border-b ${sidebarCollapsed ? 'pl-6 sm:pl-8 lg:pl-10' : 'pl-[120px] sm:pl-[120px] lg:pl-[140px]'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
                     {/* Event/Calendar Icon */}
@@ -1059,7 +916,7 @@ export default function Home() {
 
               {/* Calendar Grid */}
               {viewMode === 'calendar' && (
-                <div className="p-6">
+                <div className="px-4 sm:px-6 lg:px-8 py-6">
                   {/* Day Headers */}
                   <div className="grid grid-cols-7 gap-1 mb-2">
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
@@ -1278,7 +1135,7 @@ export default function Home() {
 
               {/* Gantt Timeline */}
               {viewMode === 'gantt' && (
-                <div className="p-6">
+                <div className={`pr-4 sm:pr-6 lg:pr-8 py-6 overflow-y-auto h-full ${sidebarCollapsed ? 'pl-6 sm:pl-8 lg:pl-10' : 'pl-[120px] sm:pl-[120px] lg:pl-[140px]'}`}>
                   {isLoading ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
@@ -1312,9 +1169,24 @@ export default function Home() {
                       <div className="bg-white border rounded-lg overflow-hidden">
                         {/* Time Axis */}
                         <div className="border-b bg-gray-50 p-3">
-                          <div className="flex justify-between text-xs text-gray-600">
+                          <div className="flex justify-between text-xs text-gray-600 mb-2">
                             <span>Timeline</span>
                             <span>{formatGanttDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))} - {formatGanttDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0))}</span>
+                          </div>
+                          {/* Week Labels */}
+                          <div className="flex relative">
+                            {getWeekGridLines().map((week, index) => (
+                              <div
+                                key={index}
+                                className="absolute text-xs text-gray-500 font-medium"
+                                style={{ 
+                                  left: `${week.start}%`,
+                                  transform: 'translateX(-50%)'
+                                }}
+                              >
+                                {week.label}
+                              </div>
+                            ))}
                           </div>
                         </div>
                         
@@ -1344,8 +1216,36 @@ export default function Home() {
                               {/* Timeline Bar */}
                               <div className="flex-1 relative">
                                 <div className="relative h-8 bg-gray-100 rounded-lg overflow-hidden">
+                                  {/* Week Grid Lines */}
+                                  {getWeekGridLines().map((week, index) => (
+                                    <div
+                                      key={index}
+                                      className="absolute top-0 bottom-0 border-l border-gray-300"
+                                      style={{ left: `${week.start}%` }}
+                                    />
+                                  ))}
+                                  
+                                  {/* Today Indicator */}
+                                  {(() => {
+                                    const today = new Date()
+                                    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+                                    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+                                    
+                                    // Only show if today is within the current month view
+                                    if (today >= startOfMonth && today <= endOfMonth) {
+                                      const todayPercent = ((today.getTime() - startOfMonth.getTime()) / (endOfMonth.getTime() - startOfMonth.getTime())) * 100
+                                      return (
+                                        <div
+                                          className="absolute top-0 bottom-0 w-0.5 bg-orange-500 z-20"
+                                          style={{ left: `${todayPercent}%` }}
+                                        />
+                                      )
+                                    }
+                                    return null
+                                  })()}
+                                  
                                   <div
-                                    className="absolute top-1 left-1 right-1 h-6 rounded transition-all duration-300 hover:opacity-80 cursor-pointer"
+                                    className="absolute top-1 left-1 right-1 h-6 rounded transition-all duration-300 hover:opacity-80 cursor-pointer z-10"
                                     style={{
                                       backgroundColor: item.eventColor,
                                       left: `${Math.max(0, ((item.start.getTime() - new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime()) / (new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getTime() - new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime())) * 100)}%`,
@@ -1389,7 +1289,6 @@ export default function Home() {
               )}
             </div>
           </div>
-        </div>
       </main>
 
       {/* Details Modal */}
