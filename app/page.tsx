@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Target, TrendingUp, CheckCircle, FileText, Zap, Plus, ChevronLeft, ChevronRight, BarChart3, RefreshCw, GripVertical, CalendarPlus } from 'lucide-react';
+import { Calendar, Plus, ChevronLeft, ChevronRight, BarChart3, RefreshCw, CalendarPlus } from 'lucide-react';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 
-import { getEvents, updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
-import { Event } from '@/lib/types';
-import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar';
 import EventSidebar from '@/components/Sidebar';
+import { getEvents, updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
+import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar';
+import { Event } from '@/lib/types';
 
 
 interface GanttItem {
@@ -58,13 +58,13 @@ export default function Home() {
   useEffect(() => {
     const loadEvents = async () => {
       try {
-        const eventsData = await getEvents()
-        console.log('Loaded events data:', eventsData)
-        console.log('Event colors:', eventsData.map(e => ({ name: e.name, color: e.color })))
-        setEvents(eventsData)
+        const eventsData = await getEvents();
+        console.log('Loaded events data:', eventsData);
+        console.log('Event colors:', eventsData.map(e => ({ name: e.name, color: e.color })));
+        setEvents(eventsData);
         
         // Load timeline items from Firebase for each event
-        const timelineData: { [key: string]: TimelineItem[] } = {}
+        const timelineData: { [key: string]: TimelineItem[] } = {};
         for (const event of eventsData) {
           if (event.timelineItems && event.timelineItems.length > 0) {
             // Migrate timeline items to have unique IDs if they don't already
@@ -73,27 +73,27 @@ export default function Home() {
               if (/^\d+$/.test(item.id)) {
                 return {
                   ...item,
-                  id: `${event.id}-${index + 1}`
-                }
+                  id: `${event.id}-${index + 1}`,
+                };
               }
-              return item
-            })
-            timelineData[event.id] = migratedTimeline
+              return item;
+            });
+            timelineData[event.id] = migratedTimeline;
           } else {
             // Generate timeline if not stored in Firebase
-            timelineData[event.id] = generateTimelineForEvent(event)
+            timelineData[event.id] = generateTimelineForEvent(event);
           }
         }
-        setEventTimelines(timelineData)
+        setEventTimelines(timelineData);
       } catch (error) {
-        console.error('Error loading events:', error)
+        console.error('Error loading events:', error);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
+    };
 
-    loadEvents()
-  }, [])
+    loadEvents();
+  }, []);
 
   // Refresh events when returning to the page
   useEffect(() => {
@@ -101,33 +101,33 @@ export default function Home() {
       // Refresh events when user returns to the tab
       const loadEvents = async () => {
         try {
-          const eventsData = await getEvents()
-          setEvents(eventsData)
+          const eventsData = await getEvents();
+          setEvents(eventsData);
         } catch (error) {
-          console.error('Error loading events:', error)
+          console.error('Error loading events:', error);
         }
-      }
-      loadEvents()
-    }
+      };
+      loadEvents();
+    };
 
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [])
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
 
   const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear()
-    const month = date.getMonth()
-    const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
-    const daysInMonth = lastDay.getDate()
-    const startingDayOfWeek = firstDay.getDay()
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
     
-    return { daysInMonth, startingDayOfWeek }
-  }
+    return { daysInMonth, startingDayOfWeek };
+  };
 
   const getEventsForDate = (date: Date) => {
-    const dateString = date.toISOString().split('T')[0]
-    const eventEvents = events.filter(event => event.date === dateString)
+    const dateString = date.toISOString().split('T')[0];
+    const eventEvents = events.filter(event => event.date === dateString);
     
     // Add confirmed timeline items for this date
     const timelineEvents = Object.values(eventTimelines).flat().filter(item => 
@@ -140,11 +140,11 @@ export default function Home() {
       location: 'Timeline Task',
       status: 'confirmed' as const,
       category: item.category,
-      isTimelineItem: true
-    }))
+      isTimelineItem: true,
+    }));
     
-    return [...eventEvents, ...timelineEvents]
-  }
+    return [...eventEvents, ...timelineEvents];
+  };
 
   const isToday = (date: Date) => {
     const today = new Date();
@@ -153,26 +153,26 @@ export default function Home() {
 
   const navigateMonth = (direction: 'prev' | 'next') => {
     setCurrentDate(prev => {
-      const newDate = new Date(prev)
+      const newDate = new Date(prev);
       if (direction === 'prev') {
-        newDate.setMonth(newDate.getMonth() - 1)
+        newDate.setMonth(newDate.getMonth() - 1);
       } else {
-        newDate.setMonth(newDate.getMonth() + 1)
+        newDate.setMonth(newDate.getMonth() + 1);
       }
-      return newDate
-    })
-  }
+      return newDate;
+    });
+  };
 
 
 
   const refreshEvents = async () => {
-    setIsRefreshing(true)
+    setIsRefreshing(true);
     try {
-      const eventsData = await getEvents()
-      setEvents(eventsData)
+      const eventsData = await getEvents();
+      setEvents(eventsData);
       
       // Load timeline items from Firebase for each event
-      const timelineData: { [key: string]: TimelineItem[] } = {}
+      const timelineData: { [key: string]: TimelineItem[] } = {};
       for (const event of eventsData) {
         if (event.timelineItems && event.timelineItems.length > 0) {
           // Migrate timeline items to have unique IDs if they don't already
@@ -181,29 +181,34 @@ export default function Home() {
             if (/^\d+$/.test(item.id)) {
               return {
                 ...item,
-                id: `${event.id}-${index + 1}`
-              }
+                id: `${event.id}-${index + 1}`,
+              };
             }
-            return item
-          })
-          timelineData[event.id] = migratedTimeline
+            return item;
+          });
+          timelineData[event.id] = migratedTimeline;
         } else {
           // Generate timeline if not stored in Firebase
-          timelineData[event.id] = generateTimelineForEvent(event)
+          timelineData[event.id] = generateTimelineForEvent(event);
         }
       }
-      setEventTimelines(timelineData)
+      setEventTimelines(timelineData);
     } catch (error) {
-      console.error('Error refreshing events:', error)
+      console.error('Error refreshing events:', error);
     } finally {
-      setIsRefreshing(false)
+      setIsRefreshing(false);
     }
-  }
+  };
 
   const generateTimelineForEvent = (eventData: Event): TimelineItem[] => {
-    const eventDate = new Date(eventData.date)
-    const timeline: TimelineItem[] = []
-    let idCounter = 1
+    if (!eventData.date) {
+      console.warn('Event has no date, cannot generate timeline');
+      return [];
+    }
+    
+    const eventDate = new Date(eventData.date);
+    const timeline: TimelineItem[] = [];
+    let idCounter = 1;
 
     // Marketing timeline - First priority (30 days before)
     if (eventData.marketingChannels.includes('media')) {
@@ -215,8 +220,8 @@ export default function Home() {
         dueTime: '07:00',
         category: 'marketing',
         status: 'pending',
-        priority: 'high'
-      })
+        priority: 'high',
+      });
     }
 
     if (eventData.marketingChannels.includes('flyers')) {
@@ -228,8 +233,8 @@ export default function Home() {
         dueTime: '07:00',
         category: 'marketing',
         status: 'pending',
-        priority: 'high'
-      })
+        priority: 'high',
+      });
     }
 
     // Logistics timeline - GEMS ticket (21 days before)
@@ -242,8 +247,8 @@ export default function Home() {
         dueTime: '07:00',
         category: 'logistics',
         status: 'pending',
-        priority: 'high'
-      })
+        priority: 'high',
+      });
     }
 
     // Email Campaign (14 days before)
@@ -256,8 +261,8 @@ export default function Home() {
         dueTime: '07:00',
         category: 'marketing',
         status: 'pending',
-        priority: 'high'
-      })
+        priority: 'high',
+      });
     }
 
     // Preparation timeline
@@ -269,8 +274,8 @@ export default function Home() {
       dueTime: '07:00',
       category: 'preparation',
       status: 'pending',
-      priority: 'medium'
-    })
+      priority: 'medium',
+    });
 
     timeline.push({
       id: `${eventData.id}-${idCounter++}`,
@@ -280,8 +285,8 @@ export default function Home() {
       dueTime: '07:00',
       category: 'logistics',
       status: 'pending',
-      priority: 'high'
-    })
+      priority: 'high',
+    });
 
     timeline.push({
       id: `${eventData.id}-${idCounter++}`,
@@ -291,122 +296,122 @@ export default function Home() {
       dueTime: '07:00',
       category: 'preparation',
       status: 'pending',
-      priority: 'high'
-    })
+      priority: 'high',
+    });
 
     // Execution timeline
     timeline.push({
       id: `${eventData.id}-${idCounter++}`,
       title: 'Event Setup',
       description: 'Arrive early to set up venue and equipment',
-      dueDate: eventData.date,
+      dueDate: eventData.date || '',
       dueTime: '07:00',
       category: 'execution',
       status: 'pending',
-      priority: 'high'
-    })
+      priority: 'high',
+    });
 
-    return timeline.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-  }
+    return timeline.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  };
 
 
 
   const toggleTimelineExpanded = (eventId: string) => {
     setExpandedTimelines(prev => {
-      const newSet = new Set(prev)
+      const newSet = new Set(prev);
       if (newSet.has(eventId)) {
-        newSet.delete(eventId)
+        newSet.delete(eventId);
       } else {
-        newSet.add(eventId)
+        newSet.add(eventId);
         // Generate timeline when expanding
-        const event = events.find(e => e.id === eventId)
+        const event = events.find(e => e.id === eventId);
         if (event && !eventTimelines[eventId]) {
-          const timeline = generateTimelineForEvent(event)
-          setEventTimelines(prev => ({ ...prev, [eventId]: timeline }))
+          const timeline = generateTimelineForEvent(event);
+          setEventTimelines(prev => ({ ...prev, [eventId]: timeline }));
         }
       }
-      return newSet
-    })
-  }
+      return newSet;
+    });
+  };
 
   const toggleEventGroup = (eventId: string) => {
     setCollapsedEventGroups(prev => {
-      const newSet = new Set(prev)
+      const newSet = new Set(prev);
       if (newSet.has(eventId)) {
-        newSet.delete(eventId)
-        console.log(`Expanded event group: ${eventId}`)
+        newSet.delete(eventId);
+        console.log(`Expanded event group: ${eventId}`);
       } else {
-        newSet.add(eventId)
-        console.log(`Collapsed event group: ${eventId}`)
+        newSet.add(eventId);
+        console.log(`Collapsed event group: ${eventId}`);
         
         // When collapsing an event group, also collapse its timeline if it's expanded
         setExpandedTimelines(prevTimelines => {
-          const newTimelineSet = new Set(prevTimelines)
+          const newTimelineSet = new Set(prevTimelines);
           if (newTimelineSet.has(eventId)) {
-            newTimelineSet.delete(eventId)
-            console.log(`Auto-collapsed timeline for event: ${eventId}`)
+            newTimelineSet.delete(eventId);
+            console.log(`Auto-collapsed timeline for event: ${eventId}`);
           }
-          return newTimelineSet
-        })
+          return newTimelineSet;
+        });
       }
-      return newSet
-    })
-  }
+      return newSet;
+    });
+  };
 
   const openDetailsModal = (event: Event) => {
-    console.log('Opening event details:', event)
-    console.log('Event color:', event.color)
-    setEditingEvent({ ...event })
-    setShowDetailsModal(event.id)
-  }
+    console.log('Opening event details:', event);
+    console.log('Event color:', event.color);
+    setEditingEvent({ ...event });
+    setShowDetailsModal(event.id);
+  };
 
   const closeDetailsModal = () => {
-    setShowDetailsModal(null)
-    setEditingEvent(null)
-  }
+    setShowDetailsModal(null);
+    setEditingEvent(null);
+  };
 
   const openEventInfoModal = (event: Event) => {
-    setSelectedEvent(event)
-    setShowEventInfoModal(true)
-  }
+    setSelectedEvent(event);
+    setShowEventInfoModal(true);
+  };
 
   const closeEventInfoModal = () => {
-    setShowEventInfoModal(false)
-    setSelectedEvent(null)
-  }
+    setShowEventInfoModal(false);
+    setSelectedEvent(null);
+  };
 
   const openTimelineItemModal = (timelineItem: TimelineItem, eventId: string) => {
-    setSelectedTimelineItem(timelineItem)
-    setSelectedTimelineEventId(eventId)
-    setShowTimelineItemModal(true)
-  }
+    setSelectedTimelineItem(timelineItem);
+    setSelectedTimelineEventId(eventId);
+    setShowTimelineItemModal(true);
+  };
 
   const closeTimelineItemModal = () => {
-    setShowTimelineItemModal(false)
-    setSelectedTimelineItem(null)
-    setSelectedTimelineEventId('')
-  }
+    setShowTimelineItemModal(false);
+    setSelectedTimelineItem(null);
+    setSelectedTimelineEventId('');
+  };
 
   const handleSelectedEventUpdate = async () => {
-    if (!selectedEvent) return
+    if (!selectedEvent) return;
 
     try {
-      await updateEvent(selectedEvent.id, selectedEvent)
+      await updateEvent(selectedEvent.id, selectedEvent);
       
       // Refresh events
-      const eventsData = await getEvents()
-      setEvents(eventsData)
+      const eventsData = await getEvents();
+      setEvents(eventsData);
       
-      closeEventInfoModal()
-      console.log('Event updated successfully')
+      closeEventInfoModal();
+      console.log('Event updated successfully');
     } catch (error) {
-      console.error('Error updating event:', error)
-      alert('Failed to update event. Please try again.')
+      console.error('Error updating event:', error);
+      alert('Failed to update event. Please try again.');
     }
-  }
+  };
 
   const handleTimelineItemUpdate = async () => {
-    if (!selectedTimelineItem || !selectedTimelineEventId) return
+    if (!selectedTimelineItem || !selectedTimelineEventId) return;
 
     try {
       const timeline = eventTimelines[selectedTimelineEventId];
@@ -420,31 +425,31 @@ export default function Home() {
       // Update local state
       setEventTimelines(prev => ({
         ...prev,
-        [selectedTimelineEventId]: updatedTimeline
-      }))
+        [selectedTimelineEventId]: updatedTimeline,
+      }));
       
       // Persist to Firebase
-      await updateEventTimelineItem(selectedTimelineEventId, updatedTimeline)
+      await updateEventTimelineItem(selectedTimelineEventId, updatedTimeline);
       
-      closeTimelineItemModal()
-      console.log('Timeline item updated successfully')
+      closeTimelineItemModal();
+      console.log('Timeline item updated successfully');
     } catch (error) {
-      console.error('Error updating timeline item:', error)
-      alert('Failed to update timeline item. Please try again.')
+      console.error('Error updating timeline item:', error);
+      alert('Failed to update timeline item. Please try again.');
     }
-  }
+  };
 
   const handleEventUpdate = async () => {
-    if (!editingEvent) return
+    if (!editingEvent) return;
 
     try {
-      await updateEvent(editingEvent.id, editingEvent)
+      await updateEvent(editingEvent.id, editingEvent);
       // Refresh events
-      const eventsData = await getEvents()
-      setEvents(eventsData)
+      const eventsData = await getEvents();
+      setEvents(eventsData);
       
       // Also refresh timeline data to ensure colors are updated
-      const timelineData: { [key: string]: TimelineItem[] } = {}
+      const timelineData: { [key: string]: TimelineItem[] } = {};
       for (const event of eventsData) {
         if (event.timelineItems && event.timelineItems.length > 0) {
           // Migrate timeline items to have unique IDs if they don't already
@@ -453,46 +458,46 @@ export default function Home() {
             if (/^\d+$/.test(item.id)) {
               return {
                 ...item,
-                id: `${event.id}-${index + 1}`
-              }
+                id: `${event.id}-${index + 1}`,
+              };
             }
-            return item
-          })
-          timelineData[event.id] = migratedTimeline
+            return item;
+          });
+          timelineData[event.id] = migratedTimeline;
         } else {
           // Generate timeline if not stored in Firebase
-          timelineData[event.id] = generateTimelineForEvent(event)
+          timelineData[event.id] = generateTimelineForEvent(event);
         }
       }
-      setEventTimelines(timelineData)
+      setEventTimelines(timelineData);
       
-      closeDetailsModal()
+      closeDetailsModal();
     } catch (error) {
-      console.error('Error updating event:', error)
-      alert('Failed to update event. Please try again.')
+      console.error('Error updating event:', error);
+      alert('Failed to update event. Please try again.');
     }
-  }
+  };
 
   const syncToGoogleCalendar = async () => {
-    setIsSyncing(true)
+    setIsSyncing(true);
     try {
       // Get all confirmed timeline items
       const confirmedItems = Object.values(eventTimelines).flat().filter(item => 
         item.status === 'confirmed'
-      )
+      );
       
       if (confirmedItems.length === 0) {
-        alert('No confirmed timeline items to sync!')
-        return
+        alert('No confirmed timeline items to sync!');
+        return;
       }
 
       // Create calendar events for each confirmed item
       const syncPromises = confirmedItems.map(async (item) => {
         const event = events.find(e => 
           Object.values(eventTimelines).flat().some(t => t.id === item.id && eventTimelines[e.id]?.includes(t))
-        )
+        );
         
-        if (!event) return null
+        if (!event) return null;
 
         return createTimelineEvent(
           event.name,
@@ -504,106 +509,42 @@ export default function Home() {
           event.location,
           item.description,
           [event.pointOfContact.email]
-        )
-      })
+        );
+      });
 
-      const results = await Promise.all(syncPromises)
-      const successfulSyncs = results.filter(r => r !== null).length
+      const results = await Promise.all(syncPromises);
+      const successfulSyncs = results.filter(r => r !== null).length;
       
-      alert(`✅ Successfully synced ${successfulSyncs} timeline items to Google Calendar!`)
+      alert(`✅ Successfully synced ${successfulSyncs} timeline items to Google Calendar!`);
       
     } catch (error) {
-      console.error('Error syncing to Google Calendar:', error)
-      alert('❌ Failed to sync to Google Calendar. Please try again.')
+      console.error('Error syncing to Google Calendar:', error);
+      alert('❌ Failed to sync to Google Calendar. Please try again.');
     } finally {
-      setIsSyncing(false)
+      setIsSyncing(false);
     }
-  }
+  };
 
 
 
-  const confirmTimelineItem = async (eventId: string, itemId: string) => {
-    const event = events.find(e => e.id === eventId)
-    const timeline = eventTimelines[eventId]
-    const item = timeline?.find(t => t.id === itemId);
-    
-    if (!event || !item || !timeline) return;
-
-    try {
-      // Update timeline status immediately for better UX
-      const updatedTimeline = timeline.map(t => 
-        t.id === itemId ? { ...t, status: 'confirmed' as const } : t
-      );
-      
-      setEventTimelines(prev => ({
-        ...prev,
-        [eventId]: updatedTimeline
-      }))
-
-      // Persist timeline items to Firebase
-      await updateEventTimelineItem(eventId, updatedTimeline)
-
-      // Update event status in Firebase if this is the first confirmed item
-      const confirmedCount = updatedTimeline.filter(t => t.status === 'confirmed').length
-      if (confirmedCount === 1) {
-        await updateEvent(event.id, { status: 'active' })
-        // Refresh events
-        const eventsData = await getEvents()
-        setEvents(eventsData)
-      }
-
-      // Log for debugging
-      console.log(`Timeline item confirmed: ${item.title}`)
-      
-    } catch (error) {
-      console.error('Error confirming timeline item:', error)
-      alert('❌ Failed to confirm timeline item. Please try again.')
-    }
-  }
 
 
 
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'marketing': return <TrendingUp className="h-4 w-4" />
-      case 'logistics': return <Calendar className="h-4 w-4" />
-      case 'preparation': return <Target className="h-4 w-4" />
-      case 'execution': return <Zap className="h-4 w-4" />
-      default: return <FileText className="h-4 w-4" />
-    }
-  }
 
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'marketing': return 'bg-blue-100 text-blue-800'
-      case 'logistics': return 'bg-green-100 text-green-800'
-      case 'preparation': return 'bg-yellow-100 text-yellow-800'
-      case 'execution': return 'bg-purple-100 text-purple-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800'
-      case 'medium': return 'bg-yellow-100 text-yellow-800'
-      case 'low': return 'bg-green-100 text-green-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
 
   const generateGanttData = (): GanttItem[] => {
-    const ganttData: GanttItem[] = []
+    const ganttData: GanttItem[] = [];
     
     // Only include timeline items from expanded events (dash doesn't affect Gantt chart)
     events.forEach(event => {
       if (expandedTimelines.has(event.id) && eventTimelines[event.id]) {
         eventTimelines[event.id].forEach(timelineItem => {
-          const startDate = new Date(timelineItem.dueDate + ' ' + timelineItem.dueTime)
-          const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000) // 2 hour duration default
+          const startDate = new Date(timelineItem.dueDate + ' ' + timelineItem.dueTime);
+          const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // 2 hour duration default
           
           // Create a unique ID for Gantt items to avoid conflicts
-          const uniqueId = `${event.id}-${timelineItem.id}-gantt`
+          const uniqueId = `${event.id}-${timelineItem.id}-gantt`;
           
           ganttData.push({
             id: uniqueId,
@@ -614,20 +555,20 @@ export default function Home() {
             end: endDate,
             category: timelineItem.category,
             status: timelineItem.status === 'confirmed' ? 'completed' : 'pending',
-            eventColor: event.color || '#10B981' // Add event color to Gantt items
-          })
-        })
+            eventColor: event.color || '#10B981', // Add event color to Gantt items
+          });
+        });
       }
-    })
+    });
     
-    return ganttData.sort((a, b) => a.start.getTime() - b.start.getTime())
-  }
+    return ganttData.sort((a, b) => a.start.getTime() - b.start.getTime());
+  };
 
 
 
   const formatGanttDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
 
   const abbreviateTitle = (title: string) => {
     // Common abbreviations for event planning tasks
@@ -651,61 +592,61 @@ export default function Home() {
       'Set Up Audio/Visual': 'A/V Setup',
       'Create Event Program': 'Program',
       'Prepare Thank You Notes': 'Thank Yous',
-      'Clean Up Venue': 'Cleanup'
-    }
+      'Clean Up Venue': 'Cleanup',
+    };
     
-    return abbreviations[title] || title.length > 20 ? title.substring(0, 20) + '...' : title
-  }
+    return abbreviations[title] || title.length > 20 ? title.substring(0, 20) + '...' : title;
+  };
 
   const getWeekGridLines = () => {
-    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
-    const totalDays = endOfMonth.getDate()
-    const weeks = []
+    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const totalDays = endOfMonth.getDate();
+    const weeks = [];
     
     for (let day = 1; day <= totalDays; day += 7) {
-      const weekStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
-      const weekEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), Math.min(day + 6, totalDays))
+      const weekStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+      const weekEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), Math.min(day + 6, totalDays));
       
-      const weekStartPercent = ((weekStart.getTime() - startOfMonth.getTime()) / (endOfMonth.getTime() - startOfMonth.getTime())) * 100
-      const weekEndPercent = ((weekEnd.getTime() - startOfMonth.getTime()) / (endOfMonth.getTime() - startOfMonth.getTime())) * 100
+      const weekStartPercent = ((weekStart.getTime() - startOfMonth.getTime()) / (endOfMonth.getTime() - startOfMonth.getTime())) * 100;
+      const weekEndPercent = ((weekEnd.getTime() - startOfMonth.getTime()) / (endOfMonth.getTime() - startOfMonth.getTime())) * 100;
       
       // Get the actual week number of the year
-      const weekNumber = getWeekNumber(weekStart)
+      const weekNumber = getWeekNumber(weekStart);
       
       weeks.push({
         start: weekStartPercent,
         end: weekEndPercent,
-        label: `Week ${weekNumber}`
-      })
+        label: `Week ${weekNumber}`,
+      });
     }
     
-    return weeks
-  }
+    return weeks;
+  };
 
   const getWeekNumber = (date: Date) => {
     // Get the first Thursday of the year
-    const firstDayOfYear = new Date(date.getFullYear(), 0, 1)
-    const firstThursday = new Date(firstDayOfYear)
-    firstThursday.setDate(firstDayOfYear.getDate() + (4 - firstDayOfYear.getDay() + 7) % 7)
+    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+    const firstThursday = new Date(firstDayOfYear);
+    firstThursday.setDate(firstDayOfYear.getDate() + (4 - firstDayOfYear.getDay() + 7) % 7);
     
     // Get the first day of the week containing the first Thursday
-    const firstWeekStart = new Date(firstThursday)
-    firstWeekStart.setDate(firstThursday.getDate() - 3)
+    const firstWeekStart = new Date(firstThursday);
+    firstWeekStart.setDate(firstThursday.getDate() - 3);
     
     // Calculate the week number
-    const daysDiff = (date.getTime() - firstWeekStart.getTime()) / (1000 * 60 * 60 * 24)
-    return Math.floor(daysDiff / 7) + 1
-  }
+    const daysDiff = (date.getTime() - firstWeekStart.getTime()) / (1000 * 60 * 60 * 24);
+    return Math.floor(daysDiff / 7) + 1;
+  };
 
-  const { daysInMonth, startingDayOfWeek } = getDaysInMonth(currentDate)
-  const currentYear = new Date().getFullYear()
+  const { daysInMonth, startingDayOfWeek } = getDaysInMonth(currentDate);
+  const currentYear = new Date().getFullYear();
   const monthName = currentDate.getFullYear() === currentYear 
     ? currentDate.toLocaleDateString('en-US', { month: 'long' })
-    : currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const monthNameShort = currentDate.getFullYear() === currentYear 
     ? currentDate.toLocaleDateString('en-US', { month: 'short' })
-    : currentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : currentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -757,7 +698,7 @@ export default function Home() {
             onToggleEventGroup={toggleEventGroup}
             onOpenDetailsModal={openDetailsModal}
             onTimelineItemClick={(eventId, item) => openTimelineItemModal(item, eventId)}
-            onConfirmTimelineItem={confirmTimelineItem}
+
             onToggleCollapsed={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
         </div>
@@ -766,477 +707,477 @@ export default function Home() {
         <div className="flex-1 overflow-hidden relative ml-0 transition-all duration-300 ease-in-out">
           <div className="bg-white shadow-sm h-full w-full">
             <div className={`pr-4 sm:pr-6 lg:pr-8 py-2.5 border-b ${sidebarCollapsed ? 'pl-6 sm:pl-8 lg:pl-10' : 'pl-[120px] sm:pl-[120px] lg:pl-[140px]'}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    {/* Event/Calendar Icon */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  {/* Event/Calendar Icon */}
+                  <div className="flex items-center space-x-2">
+                    {viewMode === 'calendar' ? (
+                      <Calendar className="h-6 w-6 text-primary-600" />
+                    ) : (
+                      <BarChart3 className="h-6 w-6 text-primary-600" />
+                    )}
+                  </div>
+                    
+                  {/* Month Navigation */}
+                  {viewMode === 'calendar' && (
                     <div className="flex items-center space-x-2">
-                      {viewMode === 'calendar' ? (
-                        <Calendar className="h-6 w-6 text-primary-600" />
-                      ) : (
-                        <BarChart3 className="h-6 w-6 text-primary-600" />
-                      )}
-                    </div>
-                    
-                    {/* Month Navigation */}
-                    {viewMode === 'calendar' && (
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => navigateMonth('prev')}
-                          className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg"
-                        >
-                          <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-                        </button>
-                        <h3 className="text-base sm:text-lg font-semibold text-gray-900">
-                          <span className="sm:hidden">{monthNameShort}</span>
-                          <span className="hidden sm:inline">{monthName}</span>
-                        </h3>
-                        <button
-                          onClick={() => navigateMonth('next')}
-                          className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg"
-                        >
-                          <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
-                        </button>
-                      </div>
-                    )}
-                    {viewMode === 'gantt' && (
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => navigateMonth('prev')}
-                          className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg"
-                        >
-                          <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-                        </button>
-                        <h3 className="text-base sm:text-lg font-semibold text-gray-900">
-                          <span className="sm:hidden">{monthNameShort}</span>
-                          <span className="hidden sm:inline">{monthName}</span>
-                        </h3>
-                        <button
-                          onClick={() => navigateMonth('next')}
-                          className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg"
-                        >
-                          <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center space-x-4">
-                    {/* View Toggle */}
-                    <div className="flex bg-gray-100 rounded-lg p-1">
                       <button
-                        onClick={() => setViewMode('calendar')}
-                        className={`flex items-center space-x-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                          viewMode === 'calendar'
-                            ? 'bg-white text-gray-900 shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
+                        onClick={() => navigateMonth('prev')}
+                        className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg"
                       >
-                        <Calendar className="h-4 w-4" />
-                        <span className="hidden lg:inline">Calendar</span>
+                        <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900">
+                        <span className="sm:hidden">{monthNameShort}</span>
+                        <span className="hidden sm:inline">{monthName}</span>
+                      </h3>
                       <button
-                        onClick={() => setViewMode('gantt')}
-                        className={`flex items-center space-x-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                          viewMode === 'gantt'
-                            ? 'bg-white text-gray-900 shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
+                        onClick={() => navigateMonth('next')}
+                        className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg"
                       >
-                        <BarChart3 className="h-4 w-4" />
-                        <span className="hidden lg:inline">Timeline</span>
+                        <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
                     </div>
-                    
-                    {/* Sync Button */}
-                    {viewMode === 'calendar' && (
+                  )}
+                  {viewMode === 'gantt' && (
+                    <div className="flex items-center space-x-2">
                       <button
-                        onClick={syncToGoogleCalendar}
-                        disabled={isSyncing}
-                        className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Sync confirmed timeline items to Google Calendar"
+                        onClick={() => navigateMonth('prev')}
+                        className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg"
                       >
-                        <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                        <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Calendar Grid */}
-              {viewMode === 'calendar' && (
-                <div className="px-4 sm:px-6 lg:px-8 py-6">
-                  {/* Day Headers */}
-                  <div className="grid grid-cols-7 gap-1 mb-2">
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                      <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Calendar Days */}
-                  <div className="grid grid-cols-7 gap-1 md:gap-2">
-                    {/* Empty cells for days before month starts */}
-                    {Array.from({ length: startingDayOfWeek }, (_, i) => (
-                      <div key={`empty-${i}`} className="h-32 bg-gray-50 rounded-lg"></div>
-                    ))}
-
-                    {/* Days of the month */}
-                    {Array.from({ length: daysInMonth }, (_, i) => {
-                      const dayNumber = i + 1
-                      const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayNumber)
-                      const dayEvents = getEventsForDate(date)
-                      const isCurrentDay = isToday(date)
-
-                      return (
-                        <div
-                          key={`${currentDate.getFullYear()}-${currentDate.getMonth()}-${dayNumber}`}
-                          className={`h-32 border rounded-lg p-1 md:p-2 ${
-                            isCurrentDay ? 'bg-primary-50 border-primary-200' : 'bg-white hover:bg-gray-50'
-                          }`}
-                          onDragOver={(e) => {
-                            e.preventDefault()
-                            e.currentTarget.style.backgroundColor = '#f3f4f6' // Light gray background when dragging over
-                          }}
-                          onDragLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = isCurrentDay ? '#eff6ff' : '#ffffff' // Reset background
-                          }}
-                                                      onDrop={async (e) => {
-                              e.preventDefault()
-                              // Reset background color
-                              e.currentTarget.style.backgroundColor = isCurrentDay ? '#eff6ff' : '#ffffff'
-                              
-                                                            try {
-                                const jsonData = e.dataTransfer.getData('application/json')
-                                console.log('Drop data received:', jsonData)
-                                
-                                if (!jsonData) {
-                                  console.log('No drag data found')
-                                  return
-                                }
-                                
-                                                                const data = JSON.parse(jsonData)
-                                console.log('Parsed drag data:', data)
-                                
-                                const { eventId, eventType, originalDate, timelineItemId } = data
-                                const targetDate = date.toISOString().split('T')[0]
-                                console.log('Target date:', targetDate, 'Original date:', originalDate)
-                               
-                                if (eventType === 'timeline') {
-                                  // Handle timeline item drag
-                                  const timeline = eventTimelines[eventId]
-                                  if (!timeline) {
-                                    console.log('Timeline not found for event:', eventId)
-                                    return
-                                  }
-                                  
-                                  const updatedTimeline = timeline.map(t => 
-                                    t.id === timelineItemId ? { ...t, dueDate: targetDate } : t
-                                  )
-                                
-                                // Update local state
-                                setEventTimelines(prev => ({
-                                  ...prev,
-                                  [eventId]: updatedTimeline
-                                }))
-                                
-                                // Persist to Firebase
-                                await updateEventTimelineItem(eventId, updatedTimeline)
-                                console.log(`Timeline item moved to ${targetDate}`)
-                              } else {
-                                // Handle regular event drag
-                                console.log('Handling regular event drag')
-                                const event = events.find(e => e.id === eventId)
-                                if (!event) {
-                                  console.log('Event not found:', eventId)
-                                  return
-                                }
-                                
-                                console.log('Found event:', event.name, 'Current date:', event.date)
-                                
-                                // Update event date
-                                const updatedEvent = { ...event, date: targetDate }
-                                console.log('Updating event with new date:', targetDate)
-                                await updateEvent(eventId, updatedEvent)
-                                
-                                // Refresh events
-                                console.log('Refreshing events...')
-                                const eventsData = await getEvents()
-                                setEvents(eventsData)
-                                console.log(`Event moved to ${targetDate}`)
-                              }
-                            } catch (error) {
-                              console.error('Error dropping event:', error)
-                            }
-                          }}
-                        >
-                          <div className="flex justify-between items-start mb-1">
-                            <span className={`text-sm font-medium ${
-                              isCurrentDay ? 'text-primary-600' : 'text-gray-900'
-                            }`}>
-                              {dayNumber}
-                            </span>
-                            {isCurrentDay && (
-                              <div className="w-2 h-2 bg-primary-600 rounded-full"></div>
-                            )}
-                          </div>
-                          
-                          {/* Events for this day */}
-                          <div className="space-y-1 text-left">
-                            {dayEvents.slice(0, 3).map((event, index) => (
-                              <div
-                                key={event.id}
-                                className={`text-xs p-1 rounded cursor-move text-left hover:opacity-80`}
-                                style={{
-                                  backgroundColor: (event as any).isTimelineItem 
-                                    ? (() => {
-                                        // For timeline items, find the parent event color
-                                        const parentEvent = events.find(e => {
-                                          const timeline = eventTimelines[e.id]
-                                          return timeline && timeline.some(t => t.dueDate === event.date && t.title === event.name)
-                                        })
-                                        return parentEvent?.color || '#10B981'
-                                      })()
-                                    : ((event as Event).color || '#10B981'),
-                                  color: '#FFFFFF'
-                                }}
-                                draggable
-                                onDragStart={(e) => {
-                                  if ((event as any).isTimelineItem) {
-                                    // For timeline items, we need to find the parent event
-                                    const parentEvent = events.find(e => {
-                                      const timeline = eventTimelines[e.id]
-                                      return timeline && timeline.some(t => t.dueDate === event.date && t.title === event.name)
-                                    })
-                                    
-                                    if (parentEvent) {
-                                      const timeline = eventTimelines[parentEvent.id]
-                                      const timelineItem = timeline.find(t => t.dueDate === event.date && t.title === event.name)
-                                      
-                                      const dragData = { 
-                                        eventId: parentEvent.id,
-                                        timelineItemId: timelineItem?.id,
-                                        eventType: 'timeline',
-                                        originalDate: event.date,
-                                        eventName: event.name
-                                      }
-                                      console.log('Timeline drag started with data:', dragData)
-                                      e.dataTransfer.setData('application/json', JSON.stringify(dragData))
-                                      e.dataTransfer.effectAllowed = 'move'
-                                    }
-                                  } else {
-                                    // For regular events
-                                    const dragData = { 
-                                      eventId: event.id, 
-                                      eventType: 'event',
-                                      originalDate: event.date,
-                                      eventName: event.name
-                                    }
-                                    console.log('Event drag started with data:', dragData)
-                                    e.dataTransfer.setData('application/json', JSON.stringify(dragData))
-                                    e.dataTransfer.effectAllowed = 'move'
-                                  }
-                                }}
-                                onClick={() => {
-                                  if ((event as any).isTimelineItem) {
-                                    // For timeline items, find the parent event and timeline item
-                                    const parentEvent = events.find(e => {
-                                      const timeline = eventTimelines[e.id]
-                                      return timeline && timeline.some(t => t.dueDate === event.date && t.title === event.name)
-                                    })
-                                    if (parentEvent) {
-                                      const timeline = eventTimelines[parentEvent.id]
-                                      const timelineItem = timeline.find(t => t.dueDate === event.date && t.title === event.name)
-                                      if (timelineItem) {
-                                        openTimelineItemModal(timelineItem, parentEvent.id)
-                                      }
-                                    }
-                                  } else {
-                                    // For regular events, open the event info modal
-                                    const actualEvent = events.find(e => e.id === event.id)
-                                    if (actualEvent) {
-                                      openEventInfoModal(actualEvent)
-                                    }
-                                  }
-                                }}
-                              >
-                                <div className="font-medium truncate">
-                                  {event.name}
-                                </div>
-                                <div className="text-gray-700">
-                                  {event.time}
-                                </div>
-                              </div>
-                            ))}
-                            {dayEvents.length > 3 && (
-                              <div className="text-xs text-gray-500 text-left">
-                                +{dayEvents.length - 3} more
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Gantt Timeline */}
-              {viewMode === 'gantt' && (
-                <div className={`pr-4 sm:pr-6 lg:pr-8 py-6 overflow-y-auto h-full ${sidebarCollapsed ? 'pl-6 sm:pl-8 lg:pl-10' : 'pl-[120px] sm:pl-[120px] lg:pl-[140px]'}`}>
-                  {isLoading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
-                      <p className="text-gray-600">Loading timeline...</p>
-                    </div>
-                  ) : events.length === 0 ? (
-                    <div className="text-center py-8">
-                      <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h4 className="text-lg font-medium text-gray-900 mb-2">No events yet</h4>
-                      <p className="text-gray-600 mb-4">Create your first event to see the timeline</p>
-                      <Link href="/event-setup" className="btn-primary">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create Event
-                      </Link>
-                    </div>
-                  ) : generateGanttData().length === 0 ? (
-                    <div className="text-center py-8">
-                      <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h4 className="text-lg font-medium text-gray-900 mb-2">No timeline items to display</h4>
-                      <p className="text-gray-600 mb-4">Expand events in the sidebar to see their timeline items</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {/* Gantt Chart Header */}
-                      <div className="mb-6">
-                      </div>
-                      
-
-                      
-                      {/* Gantt Chart */}
-                      <div className="bg-white border rounded-lg overflow-hidden">
-                        {/* Time Axis */}
-                        <div className="border-b bg-gray-50 p-3">
-                          <div className="flex justify-between text-xs text-gray-600 mb-2">
-                            <span>Timeline</span>
-                            <span>{formatGanttDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))} - {formatGanttDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0))}</span>
-                          </div>
-                          {/* Week Labels */}
-                          <div className="flex relative">
-                            {getWeekGridLines().map((week, index) => (
-                              <div
-                                key={index}
-                                className="absolute text-xs text-gray-500 font-medium"
-                                style={{ 
-                                  left: `${week.start}%`,
-                                  transform: 'translateX(-50%)'
-                                }}
-                              >
-                                {week.label}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        
-                        {/* Gantt Bars */}
-                        <div className="p-4 space-y-3">
-                          {generateGanttData().map((item) => (
-                            <motion.div
-                              key={item.id}
-                              initial={{ opacity: 0, x: -20 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              className="flex items-center space-x-4"
-                            >
-                              {/* Task Info */}
-                              <div className="w-48 flex-shrink-0">
-                                <div className="flex items-center space-x-2">
-                                  <div 
-                                    className="w-3 h-3 rounded-full"
-                                    style={{ backgroundColor: item.eventColor }}
-                                  ></div>
-                                  <div>
-                                    <p className="text-sm font-medium text-gray-900 truncate" title={item.task}>{abbreviateTitle(item.task)}</p>
-                                    <p className="text-xs text-gray-500">{item.eventName}</p>
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              {/* Timeline Bar */}
-                              <div className="flex-1 relative">
-                                <div className="relative h-8 bg-gray-100 rounded-lg overflow-hidden">
-                                  {/* Week Grid Lines */}
-                                  {getWeekGridLines().map((week, index) => (
-                                    <div
-                                      key={index}
-                                      className="absolute top-0 bottom-0 border-l border-gray-300"
-                                      style={{ left: `${week.start}%` }}
-                                    />
-                                  ))}
-                                  
-                                  {/* Today Indicator */}
-                                  {(() => {
-                                    const today = new Date()
-                                    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-                                    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
-                                    
-                                    // Only show if today is within the current month view
-                                    if (today >= startOfMonth && today <= endOfMonth) {
-                                      const todayPercent = ((today.getTime() - startOfMonth.getTime()) / (endOfMonth.getTime() - startOfMonth.getTime())) * 100
-                                      return (
-                                        <div
-                                          className="absolute top-0 bottom-0 w-0.5 bg-orange-500 z-20"
-                                          style={{ left: `${todayPercent}%` }}
-                                        />
-                                      )
-                                    }
-                                    return null
-                                  })()}
-                                  
-                                  <div
-                                    className="absolute top-1 left-1 right-1 h-6 rounded transition-all duration-300 hover:opacity-80 cursor-pointer z-10"
-                                    style={{
-                                      backgroundColor: item.eventColor,
-                                      left: `${Math.max(0, ((item.start.getTime() - new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime()) / (new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getTime() - new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime())) * 100)}%`,
-                                      width: `${Math.max(5, ((item.end.getTime() - item.start.getTime()) / (new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getTime() - new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime())) * 100)}%`
-                                    }}
-                                    onClick={() => {
-                                      const event = events.find(e => e.id === item.eventId)
-                                      if (event) {
-                                        openEventInfoModal(event)
-                                      }
-                                    }}
-                                    title={`${item.task} - ${formatGanttDate(item.start)} to ${formatGanttDate(item.end)}`}
-                                  >
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                      <span className="text-xs font-medium text-white drop-shadow-sm px-2 truncate">
-                                        {abbreviateTitle(item.task)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {formatGanttDate(item.start)} - {formatGanttDate(item.end)}
-                                </div>
-                              </div>
-                              
-                              {/* Status - Only show if not completed */}
-                              {item.status !== 'completed' && (
-                                <div className="w-20 flex-shrink-0">
-                                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                    Pending
-                                  </span>
-                                </div>
-                              )}
-                            </motion.div>
-                          ))}
-                        </div>
-                      </div>
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900">
+                        <span className="sm:hidden">{monthNameShort}</span>
+                        <span className="hidden sm:inline">{monthName}</span>
+                      </h3>
+                      <button
+                        onClick={() => navigateMonth('next')}
+                        className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg"
+                      >
+                        <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+                      </button>
                     </div>
                   )}
                 </div>
-              )}
+                  
+                <div className="flex items-center space-x-4">
+                  {/* View Toggle */}
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setViewMode('calendar')}
+                      className={`flex items-center space-x-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        viewMode === 'calendar'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Calendar className="h-4 w-4" />
+                      <span className="hidden lg:inline">Calendar</span>
+                    </button>
+                    <button
+                      onClick={() => setViewMode('gantt')}
+                      className={`flex items-center space-x-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        viewMode === 'gantt'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      <span className="hidden lg:inline">Timeline</span>
+                    </button>
+                  </div>
+                    
+                  {/* Sync Button */}
+                  {viewMode === 'calendar' && (
+                    <button
+                      onClick={syncToGoogleCalendar}
+                      disabled={isSyncing}
+                      className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Sync confirmed timeline items to Google Calendar"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
+
+            {/* Calendar Grid */}
+            {viewMode === 'calendar' && (
+              <div className="px-4 sm:px-6 lg:px-8 py-6">
+                {/* Day Headers */}
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+                      {day}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Calendar Days */}
+                <div className="grid grid-cols-7 gap-1 md:gap-2">
+                  {/* Empty cells for days before month starts */}
+                  {Array.from({ length: startingDayOfWeek }, (_, i) => (
+                    <div key={`empty-${i}`} className="h-32 bg-gray-50 rounded-lg"></div>
+                  ))}
+
+                  {/* Days of the month */}
+                  {Array.from({ length: daysInMonth }, (_, i) => {
+                    const dayNumber = i + 1;
+                    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayNumber);
+                    const dayEvents = getEventsForDate(date);
+                    const isCurrentDay = isToday(date);
+
+                    return (
+                      <div
+                        key={`${currentDate.getFullYear()}-${currentDate.getMonth()}-${dayNumber}`}
+                        className={`h-32 border rounded-lg p-1 md:p-2 ${
+                          isCurrentDay ? 'bg-primary-50 border-primary-200' : 'bg-white hover:bg-gray-50'
+                        }`}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.style.backgroundColor = '#f3f4f6'; // Light gray background when dragging over
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = isCurrentDay ? '#eff6ff' : '#ffffff'; // Reset background
+                        }}
+                        onDrop={async (e) => {
+                          e.preventDefault();
+                          // Reset background color
+                          e.currentTarget.style.backgroundColor = isCurrentDay ? '#eff6ff' : '#ffffff';
+                              
+                          try {
+                            const jsonData = e.dataTransfer.getData('application/json');
+                            console.log('Drop data received:', jsonData);
+                                
+                            if (!jsonData) {
+                              console.log('No drag data found');
+                              return;
+                            }
+                                
+                            const data = JSON.parse(jsonData);
+                            console.log('Parsed drag data:', data);
+                                
+                            const { eventId, eventType, originalDate, timelineItemId } = data;
+                            const targetDate = date.toISOString().split('T')[0];
+                            console.log('Target date:', targetDate, 'Original date:', originalDate);
+                               
+                            if (eventType === 'timeline') {
+                              // Handle timeline item drag
+                              const timeline = eventTimelines[eventId];
+                              if (!timeline) {
+                                console.log('Timeline not found for event:', eventId);
+                                return;
+                              }
+                                  
+                              const updatedTimeline = timeline.map(t => 
+                                t.id === timelineItemId ? { ...t, dueDate: targetDate } : t
+                              );
+                                
+                              // Update local state
+                              setEventTimelines(prev => ({
+                                ...prev,
+                                [eventId]: updatedTimeline,
+                              }));
+                                
+                              // Persist to Firebase
+                              await updateEventTimelineItem(eventId, updatedTimeline);
+                              console.log(`Timeline item moved to ${targetDate}`);
+                            } else {
+                              // Handle regular event drag
+                              console.log('Handling regular event drag');
+                              const event = events.find(e => e.id === eventId);
+                              if (!event) {
+                                console.log('Event not found:', eventId);
+                                return;
+                              }
+                                
+                              console.log('Found event:', event.name, 'Current date:', event.date);
+                                
+                              // Update event date
+                              const updatedEvent = { ...event, date: targetDate };
+                              console.log('Updating event with new date:', targetDate);
+                              await updateEvent(eventId, updatedEvent);
+                                
+                              // Refresh events
+                              console.log('Refreshing events...');
+                              const eventsData = await getEvents();
+                              setEvents(eventsData);
+                              console.log(`Event moved to ${targetDate}`);
+                            }
+                          } catch (error) {
+                            console.error('Error dropping event:', error);
+                          }
+                        }}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <span className={`text-sm font-medium ${
+                            isCurrentDay ? 'text-primary-600' : 'text-gray-900'
+                          }`}>
+                            {dayNumber}
+                          </span>
+                          {isCurrentDay && (
+                            <div className="w-2 h-2 bg-primary-600 rounded-full"></div>
+                          )}
+                        </div>
+                          
+                        {/* Events for this day */}
+                        <div className="space-y-1 text-left">
+                          {dayEvents.slice(0, 3).map((event, _index) => (
+                            <div
+                              key={event.id}
+                              className={'text-xs p-1 rounded cursor-move text-left hover:opacity-80'}
+                              style={{
+                                backgroundColor: (event as any).isTimelineItem 
+                                  ? (() => {
+                                    // For timeline items, find the parent event color
+                                    const parentEvent = events.find(e => {
+                                      const timeline = eventTimelines[e.id];
+                                      return timeline && timeline.some(t => t.dueDate === event.date && t.title === event.name);
+                                    });
+                                    return parentEvent?.color || '#10B981';
+                                  })()
+                                  : ((event as Event).color || '#10B981'),
+                                color: '#FFFFFF',
+                              }}
+                              draggable
+                              onDragStart={(e) => {
+                                if ((event as any).isTimelineItem) {
+                                  // For timeline items, we need to find the parent event
+                                  const parentEvent = events.find(e => {
+                                    const timeline = eventTimelines[e.id];
+                                    return timeline && timeline.some(t => t.dueDate === event.date && t.title === event.name);
+                                  });
+                                    
+                                  if (parentEvent) {
+                                    const timeline = eventTimelines[parentEvent.id];
+                                    const timelineItem = timeline.find(t => t.dueDate === event.date && t.title === event.name);
+                                      
+                                    const dragData = { 
+                                      eventId: parentEvent.id,
+                                      timelineItemId: timelineItem?.id,
+                                      eventType: 'timeline',
+                                      originalDate: event.date,
+                                      eventName: event.name,
+                                    };
+                                    console.log('Timeline drag started with data:', dragData);
+                                    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+                                    e.dataTransfer.effectAllowed = 'move';
+                                  }
+                                } else {
+                                  // For regular events
+                                  const dragData = { 
+                                    eventId: event.id, 
+                                    eventType: 'event',
+                                    originalDate: event.date,
+                                    eventName: event.name,
+                                  };
+                                  console.log('Event drag started with data:', dragData);
+                                  e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+                                  e.dataTransfer.effectAllowed = 'move';
+                                }
+                              }}
+                              onClick={() => {
+                                if ((event as any).isTimelineItem) {
+                                  // For timeline items, find the parent event and timeline item
+                                  const parentEvent = events.find(e => {
+                                    const timeline = eventTimelines[e.id];
+                                    return timeline && timeline.some(t => t.dueDate === event.date && t.title === event.name);
+                                  });
+                                  if (parentEvent) {
+                                    const timeline = eventTimelines[parentEvent.id];
+                                    const timelineItem = timeline.find(t => t.dueDate === event.date && t.title === event.name);
+                                    if (timelineItem) {
+                                      openTimelineItemModal(timelineItem, parentEvent.id);
+                                    }
+                                  }
+                                } else {
+                                  // For regular events, open the event info modal
+                                  const actualEvent = events.find(e => e.id === event.id);
+                                  if (actualEvent) {
+                                    openEventInfoModal(actualEvent);
+                                  }
+                                }
+                              }}
+                            >
+                              <div className="font-medium truncate">
+                                {event.name}
+                              </div>
+                              <div className="text-gray-700">
+                                {event.time}
+                              </div>
+                            </div>
+                          ))}
+                          {dayEvents.length > 3 && (
+                            <div className="text-xs text-gray-500 text-left">
+                                +{dayEvents.length - 3} more
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Gantt Timeline */}
+            {viewMode === 'gantt' && (
+              <div className={`pr-4 sm:pr-6 lg:pr-8 py-6 overflow-y-auto h-full ${sidebarCollapsed ? 'pl-6 sm:pl-8 lg:pl-10' : 'pl-[120px] sm:pl-[120px] lg:pl-[140px]'}`}>
+                {isLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading timeline...</p>
+                  </div>
+                ) : events.length === 0 ? (
+                  <div className="text-center py-8">
+                    <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h4 className="text-lg font-medium text-gray-900 mb-2">No events yet</h4>
+                    <p className="text-gray-600 mb-4">Create your first event to see the timeline</p>
+                    <Link href="/event-setup" className="btn-primary">
+                      <Plus className="h-4 w-4 mr-2" />
+                        Create Event
+                    </Link>
+                  </div>
+                ) : generateGanttData().length === 0 ? (
+                  <div className="text-center py-8">
+                    <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h4 className="text-lg font-medium text-gray-900 mb-2">No timeline items to display</h4>
+                    <p className="text-gray-600 mb-4">Expand events in the sidebar to see their timeline items</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Gantt Chart Header */}
+                    <div className="mb-6">
+                    </div>
+                      
+
+                      
+                    {/* Gantt Chart */}
+                    <div className="bg-white border rounded-lg overflow-hidden">
+                      {/* Time Axis */}
+                      <div className="border-b bg-gray-50 p-3">
+                        <div className="flex justify-between text-xs text-gray-600 mb-2">
+                          <span>Timeline</span>
+                          <span>{formatGanttDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))} - {formatGanttDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0))}</span>
+                        </div>
+                        {/* Week Labels */}
+                        <div className="flex relative">
+                          {getWeekGridLines().map((week, index) => (
+                            <div
+                              key={index}
+                              className="absolute text-xs text-gray-500 font-medium"
+                              style={{ 
+                                left: `${week.start}%`,
+                                transform: 'translateX(-50%)',
+                              }}
+                            >
+                              {week.label}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                        
+                      {/* Gantt Bars */}
+                      <div className="p-4 space-y-3">
+                        {generateGanttData().map((item) => (
+                          <motion.div
+                            key={item.id}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="flex items-center space-x-4"
+                          >
+                            {/* Task Info */}
+                            <div className="w-48 flex-shrink-0">
+                              <div className="flex items-center space-x-2">
+                                <div 
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: item.eventColor }}
+                                ></div>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900 truncate" title={item.task}>{abbreviateTitle(item.task)}</p>
+                                  <p className="text-xs text-gray-500">{item.eventName}</p>
+                                </div>
+                              </div>
+                            </div>
+                              
+                            {/* Timeline Bar */}
+                            <div className="flex-1 relative">
+                              <div className="relative h-8 bg-gray-100 rounded-lg overflow-hidden">
+                                {/* Week Grid Lines */}
+                                {getWeekGridLines().map((week, index) => (
+                                  <div
+                                    key={index}
+                                    className="absolute top-0 bottom-0 border-l border-gray-300"
+                                    style={{ left: `${week.start}%` }}
+                                  />
+                                ))}
+                                  
+                                {/* Today Indicator */}
+                                {(() => {
+                                  const today = new Date();
+                                  const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+                                  const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+                                    
+                                  // Only show if today is within the current month view
+                                  if (today >= startOfMonth && today <= endOfMonth) {
+                                    const todayPercent = ((today.getTime() - startOfMonth.getTime()) / (endOfMonth.getTime() - startOfMonth.getTime())) * 100;
+                                    return (
+                                      <div
+                                        className="absolute top-0 bottom-0 w-0.5 bg-orange-500 z-20"
+                                        style={{ left: `${todayPercent}%` }}
+                                      />
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                                  
+                                <div
+                                  className="absolute top-1 left-1 right-1 h-6 rounded transition-all duration-300 hover:opacity-80 cursor-pointer z-10"
+                                  style={{
+                                    backgroundColor: item.eventColor,
+                                    left: `${Math.max(0, ((item.start.getTime() - new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime()) / (new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getTime() - new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime())) * 100)}%`,
+                                    width: `${Math.max(5, ((item.end.getTime() - item.start.getTime()) / (new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getTime() - new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getTime())) * 100)}%`,
+                                  }}
+                                  onClick={() => {
+                                    const event = events.find(e => e.id === item.eventId);
+                                    if (event) {
+                                      openEventInfoModal(event);
+                                    }
+                                  }}
+                                  title={`${item.task} - ${formatGanttDate(item.start)} to ${formatGanttDate(item.end)}`}
+                                >
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="text-xs font-medium text-white drop-shadow-sm px-2 truncate">
+                                      {abbreviateTitle(item.task)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {formatGanttDate(item.start)} - {formatGanttDate(item.end)}
+                              </div>
+                            </div>
+                              
+                            {/* Status - Only show if not completed */}
+                            {item.status !== 'completed' && (
+                              <div className="w-20 flex-shrink-0">
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    Pending
+                                </span>
+                              </div>
+                            )}
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+        </div>
       </main>
 
       {/* Details Modal */}
@@ -1302,10 +1243,10 @@ export default function Home() {
                           '#84CC16', // Lime
                           '#F97316', // Orange
                           '#6B7280', // Gray
-                        ]
-                        const currentIndex = colors.indexOf(editingEvent.color || '#10B981')
-                        const nextIndex = (currentIndex + 1) % colors.length
-                        setEditingEvent({ ...editingEvent, color: colors[nextIndex] })
+                        ];
+                        const currentIndex = colors.indexOf(editingEvent.color || '#10B981');
+                        const nextIndex = (currentIndex + 1) % colors.length;
+                        setEditingEvent({ ...editingEvent, color: colors[nextIndex] });
                       }}
                       title="Click to cycle through colors"
                     />
@@ -1363,7 +1304,7 @@ export default function Home() {
                       value={editingEvent.pointOfContact.name}
                       onChange={(e) => setEditingEvent({
                         ...editingEvent,
-                        pointOfContact: { ...editingEvent.pointOfContact, name: e.target.value }
+                        pointOfContact: { ...editingEvent.pointOfContact, name: e.target.value },
                       })}
                       className="form-input w-full"
                     />
@@ -1375,7 +1316,7 @@ export default function Home() {
                       value={editingEvent.pointOfContact.email}
                       onChange={(e) => setEditingEvent({
                         ...editingEvent,
-                        pointOfContact: { ...editingEvent.pointOfContact, email: e.target.value }
+                        pointOfContact: { ...editingEvent.pointOfContact, email: e.target.value },
                       })}
                       className="form-input w-full"
                     />
@@ -1387,7 +1328,7 @@ export default function Home() {
                       value={editingEvent.pointOfContact.phone || ''}
                       onChange={(e) => setEditingEvent({
                         ...editingEvent,
-                        pointOfContact: { ...editingEvent.pointOfContact, phone: e.target.value }
+                        pointOfContact: { ...editingEvent.pointOfContact, phone: e.target.value },
                       })}
                       className="form-input w-full"
                     />
@@ -1418,8 +1359,8 @@ export default function Home() {
                         onChange={(e) => {
                           const newChannels = e.target.checked
                             ? [...editingEvent.marketingChannels, channel]
-                            : editingEvent.marketingChannels.filter(c => c !== channel)
-                          setEditingEvent({ ...editingEvent, marketingChannels: newChannels })
+                            : editingEvent.marketingChannels.filter(c => c !== channel);
+                          setEditingEvent({ ...editingEvent, marketingChannels: newChannels });
                         }}
                         className="mr-2"
                       />
@@ -1613,7 +1554,7 @@ export default function Home() {
                       value={selectedEvent.pointOfContact.name}
                       onChange={(e) => setSelectedEvent({
                         ...selectedEvent,
-                        pointOfContact: { ...selectedEvent.pointOfContact, name: e.target.value }
+                        pointOfContact: { ...selectedEvent.pointOfContact, name: e.target.value },
                       })}
                       className="form-input w-full"
                       placeholder="Contact name"
@@ -1626,7 +1567,7 @@ export default function Home() {
                       value={selectedEvent.pointOfContact.email}
                       onChange={(e) => setSelectedEvent({
                         ...selectedEvent,
-                        pointOfContact: { ...selectedEvent.pointOfContact, email: e.target.value }
+                        pointOfContact: { ...selectedEvent.pointOfContact, email: e.target.value },
                       })}
                       className="form-input w-full"
                       placeholder="Contact email"
@@ -1666,13 +1607,13 @@ export default function Home() {
                 </button>
                 <button
                   onClick={async () => {
-                    await handleSelectedEventUpdate()
+                    await handleSelectedEventUpdate();
                     // After saving, sync to Google Calendar
                     try {
-                      await syncToGoogleCalendar()
-                      closeEventInfoModal()
+                      await syncToGoogleCalendar();
+                      closeEventInfoModal();
                     } catch (error) {
-                      console.error('Error syncing to calendar:', error)
+                      console.error('Error syncing to calendar:', error);
                     }
                   }}
                   className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center space-x-2"
@@ -1843,5 +1784,5 @@ export default function Home() {
         </div>
       )}
     </div>
-  )
+  );
 } 

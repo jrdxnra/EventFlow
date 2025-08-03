@@ -1,12 +1,13 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { ArrowLeft, Plus, Users, Calendar, Clock, User, Phone, Mail, MapPin, Clipboard, Trash2, Edit3 } from 'lucide-react'
-import Link from 'next/link'
-import { useParams } from 'next/navigation'
-import { getEventById } from '@/lib/firebase-events'
-import { Event } from '@/lib/types'
+import { motion } from 'framer-motion';
+import { ArrowLeft, Plus, Users, Calendar, Clock, User, Phone, Mail, MapPin, Trash2, Edit3 } from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+
+import { getEventById } from '@/lib/firebase-events';
+import { Event } from '@/lib/types';
 
 interface TeamMember {
   id: string
@@ -49,30 +50,30 @@ interface Contact {
 }
 
 export default function EventLogistics() {
-  const params = useParams()
-  const eventId = params.eventId as string
+  const params = useParams();
+  const eventId = params.eventId as string;
   
-  const [event, setEvent] = useState<Event | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'team' | 'activities' | 'schedule' | 'contacts'>('team')
+  const [event, setEvent] = useState<Event | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'team' | 'activities' | 'schedule' | 'contacts'>('team');
   
   // Team Management
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
-  const [showAddTeamMember, setShowAddTeamMember] = useState(false)
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [showAddTeamMember, setShowAddTeamMember] = useState(false);
   const [newTeamMember, setNewTeamMember] = useState({
     name: '',
     email: '',
     phone: '',
     role: '',
     arrivalTime: '',
-    responsibilities: ['']
-  })
-  const [showEditTeamMember, setShowEditTeamMember] = useState(false)
-  const [editingTeamMember, setEditingTeamMember] = useState<TeamMember | null>(null)
+    responsibilities: [''],
+  });
+  const [showEditTeamMember, setShowEditTeamMember] = useState(false);
+  const [editingTeamMember, setEditingTeamMember] = useState<TeamMember | null>(null);
 
   // Activity Management
-  const [activities, setActivities] = useState<EventActivity[]>([])
-  const [showAddActivity, setShowAddActivity] = useState(false)
+  const [activities, setActivities] = useState<EventActivity[]>([]);
+  const [showAddActivity, setShowAddActivity] = useState(false);
   const [newActivity, setNewActivity] = useState({
     name: '',
     description: '',
@@ -80,47 +81,47 @@ export default function EventLogistics() {
     endTime: '',
     leader: '',
     location: '',
-    materials: ['']
-  })
+    materials: [''],
+  });
 
   // Day-of Schedule
-  const [dayOfSchedule, setDayOfSchedule] = useState<DayOfSchedule[]>([])
-  const [showAddScheduleItem, setShowAddScheduleItem] = useState(false)
+  const [dayOfSchedule, setDayOfSchedule] = useState<DayOfSchedule[]>([]);
+  const [showAddScheduleItem, setShowAddScheduleItem] = useState(false);
   const [newScheduleItem, setNewScheduleItem] = useState({
     time: '07:00',
     activity: '',
     location: '',
     responsible: '',
-    notes: ''
-  })
+    notes: '',
+  });
 
   // Contact Management
-  const [contacts, setContacts] = useState<Contact[]>([])
-  const [showAddContact, setShowAddContact] = useState(false)
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [showAddContact, setShowAddContact] = useState(false);
   const [newContact, setNewContact] = useState({
     name: '',
     email: '',
     phone: '',
     role: '',
     category: 'other' as const,
-    notes: ''
-  })
+    notes: '',
+  });
 
   // Key Contacts Management
   const [venueContact, setVenueContact] = useState({
     name: 'Venue Contact',
     email: '',
     phone: '',
-    notes: 'Contact venue directly'
-  })
+    notes: 'Contact venue directly',
+  });
   const [emergencyContact, setEmergencyContact] = useState({
     name: 'Emergency Contact',
     email: '',
     phone: '911',
-    notes: 'Call 911 if needed'
-  })
-  const [showEditVenue, setShowEditVenue] = useState(false)
-  const [showEditEmergency, setShowEditEmergency] = useState(false)
+    notes: 'Call 911 if needed',
+  });
+  const [showEditVenue, setShowEditVenue] = useState(false);
+  const [showEditEmergency, setShowEditEmergency] = useState(false);
 
   const roleOptions = [
     'Event Lead',
@@ -132,44 +133,33 @@ export default function EventLogistics() {
     'Photographer',
     'Equipment Manager',
     'Catering Coordinator',
-    'Transportation Lead'
-  ]
+    'Transportation Lead',
+  ];
 
-  const responsibilityOptions = [
-    'Setup equipment and signage',
-    'Manage registration table',
-    'Lead fitness activities',
-    'Monitor safety protocols',
-    'Take photos/videos',
-    'Manage equipment inventory',
-    'Coordinate catering',
-    'Handle transportation',
-    'Clean up venue',
-    'Manage first aid station'
-  ]
+
 
   useEffect(() => {
     const loadEvent = async () => {
       try {
-        const eventData = await getEventById(eventId)
+        const eventData = await getEventById(eventId);
         if (eventData) {
-          setEvent(eventData)
+          setEvent(eventData);
           // Generate default team members based on event data
-          generateDefaultTeam(eventData)
+          generateDefaultTeam(eventData);
           // Generate default activities based on event type
-          generateDefaultActivities(eventData)
+          generateDefaultActivities(eventData);
           // Generate default day-of schedule
-          generateDefaultSchedule(eventData)
+          generateDefaultSchedule(eventData);
         }
       } catch (error) {
-        console.error('Error loading event:', error)
+        console.error('Error loading event:', error);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
+    };
 
-    loadEvent()
-  }, [eventId])
+    loadEvent();
+  }, [eventId]);
 
   const generateDefaultTeam = (eventData: Event) => {
     const defaultTeam: TeamMember[] = [
@@ -180,7 +170,7 @@ export default function EventLogistics() {
         phone: eventData.pointOfContact.phone,
         role: 'Event Lead',
         arrivalTime: '2 hours before',
-        responsibilities: ['Overall event coordination', 'Emergency contact']
+        responsibilities: ['Overall event coordination', 'Emergency contact'],
       },
       {
         id: '2',
@@ -189,7 +179,7 @@ export default function EventLogistics() {
         phone: '',
         role: 'Setup Coordinator',
         arrivalTime: '2 hours before',
-        responsibilities: ['Set up venue and equipment', 'Manage setup team', 'Coordinate with venue']
+        responsibilities: ['Set up venue and equipment', 'Manage setup team', 'Coordinate with venue'],
       },
       {
         id: '3',
@@ -198,7 +188,7 @@ export default function EventLogistics() {
         phone: '',
         role: 'Activity Lead',
         arrivalTime: '1 hour before',
-        responsibilities: ['Lead event activities', 'Manage participant engagement', 'Coordinate with coaches']
+        responsibilities: ['Lead event activities', 'Manage participant engagement', 'Coordinate with coaches'],
       },
       {
         id: '4',
@@ -207,11 +197,11 @@ export default function EventLogistics() {
         phone: '',
         role: 'Clean Up Coordinator',
         arrivalTime: 'During event',
-        responsibilities: ['Coordinate cleanup', 'Manage breakdown', 'Ensure venue is left clean']
-      }
-    ]
-    setTeamMembers(defaultTeam)
-  }
+        responsibilities: ['Coordinate cleanup', 'Manage breakdown', 'Ensure venue is left clean'],
+      },
+    ];
+    setTeamMembers(defaultTeam);
+  };
 
   const generateDefaultActivities = (eventData: Event) => {
     const defaultActivities: EventActivity[] = [
@@ -223,7 +213,7 @@ export default function EventLogistics() {
         endTime: '30 minutes before event',
         leader: eventData.pointOfContact.name,
         location: eventData.location,
-        materials: ['Tables', 'Chairs', 'Signage', 'Equipment']
+        materials: ['Tables', 'Chairs', 'Signage', 'Equipment'],
       },
       {
         id: '2',
@@ -233,14 +223,14 @@ export default function EventLogistics() {
         endTime: '15 minutes after start',
         leader: 'TBD',
         location: 'Registration table',
-        materials: ['Sign-in sheets', 'Name tags', 'Information packets']
-      }
-    ]
-    setActivities(defaultActivities)
-  }
+        materials: ['Sign-in sheets', 'Name tags', 'Information packets'],
+      },
+    ];
+    setActivities(defaultActivities);
+  };
 
   const generateDefaultSchedule = (eventData: Event) => {
-    const eventTime = new Date(`${eventData.date}T${eventData.time}`)
+    const eventTime = new Date(`${eventData.date}T${eventData.time}`);
     const defaultSchedule: DayOfSchedule[] = [
       {
         id: '1',
@@ -248,7 +238,7 @@ export default function EventLogistics() {
         activity: 'Setup begins',
         location: eventData.location,
         responsible: eventData.pointOfContact.name,
-        notes: 'Arrive early to set up venue and equipment'
+        notes: 'Arrive early to set up venue and equipment',
       },
       {
         id: '2',
@@ -256,7 +246,7 @@ export default function EventLogistics() {
         activity: 'Registration opens',
         location: 'Registration table',
         responsible: 'Registration Lead',
-        notes: 'Welcome participants and collect information'
+        notes: 'Welcome participants and collect information',
       },
       {
         id: '3',
@@ -264,7 +254,7 @@ export default function EventLogistics() {
         activity: 'Event starts',
         location: eventData.location,
         responsible: eventData.pointOfContact.name,
-        notes: 'Main event activities begin'
+        notes: 'Main event activities begin',
       },
       {
         id: '4',
@@ -272,40 +262,40 @@ export default function EventLogistics() {
         activity: 'Event ends',
         location: eventData.location,
         responsible: 'Cleanup Coordinator',
-        notes: 'Begin cleanup and breakdown'
-      }
-    ]
-    setDayOfSchedule(defaultSchedule)
-  }
+        notes: 'Begin cleanup and breakdown',
+      },
+    ];
+    setDayOfSchedule(defaultSchedule);
+  };
 
   const addTeamMember = () => {
     if (newTeamMember.name && newTeamMember.role) {
       const member: TeamMember = {
         id: Date.now().toString(),
         ...newTeamMember,
-        responsibilities: newTeamMember.responsibilities.filter(r => r.trim() !== '')
-      }
-      setTeamMembers([...teamMembers, member])
+        responsibilities: newTeamMember.responsibilities.filter(r => r.trim() !== ''),
+      };
+      setTeamMembers([...teamMembers, member]);
       setNewTeamMember({
         name: '',
         email: '',
         phone: '',
         role: '',
         arrivalTime: '',
-        responsibilities: ['']
-      })
-      setShowAddTeamMember(false)
+        responsibilities: [''],
+      });
+      setShowAddTeamMember(false);
     }
-  }
+  };
 
   const addActivity = () => {
     if (newActivity.name && newActivity.startTime) {
       const activity: EventActivity = {
         id: Date.now().toString(),
         ...newActivity,
-        materials: newActivity.materials.filter(m => m.trim() !== '')
-      }
-      setActivities([...activities, activity])
+        materials: newActivity.materials.filter(m => m.trim() !== ''),
+      };
+      setActivities([...activities, activity]);
       setNewActivity({
         name: '',
         description: '',
@@ -313,85 +303,85 @@ export default function EventLogistics() {
         endTime: '',
         leader: '',
         location: '',
-        materials: ['']
-      })
-      setShowAddActivity(false)
+        materials: [''],
+      });
+      setShowAddActivity(false);
     }
-  }
+  };
 
   const addScheduleItem = () => {
     if (newScheduleItem.time && newScheduleItem.activity) {
       const item: DayOfSchedule = {
         id: Date.now().toString(),
-        ...newScheduleItem
-      }
-      setDayOfSchedule([...dayOfSchedule, item])
+        ...newScheduleItem,
+      };
+      setDayOfSchedule([...dayOfSchedule, item]);
       setNewScheduleItem({
         time: '07:00',
         activity: '',
         location: '',
         responsible: '',
-        notes: ''
-      })
-      setShowAddScheduleItem(false)
+        notes: '',
+      });
+      setShowAddScheduleItem(false);
     }
-  }
+  };
 
   const removeTeamMember = (id: string) => {
-    setTeamMembers(teamMembers.filter(member => member.id !== id))
-  }
+    setTeamMembers(teamMembers.filter(member => member.id !== id));
+  };
 
   const editTeamMember = (member: TeamMember) => {
-    setEditingTeamMember(member)
-    setShowEditTeamMember(true)
-  }
+    setEditingTeamMember(member);
+    setShowEditTeamMember(true);
+  };
 
   const updateTeamMember = () => {
-    if (!editingTeamMember) return
+    if (!editingTeamMember) return;
     
     setTeamMembers(prev => prev.map(member => 
       member.id === editingTeamMember.id ? editingTeamMember : member
-    ))
-    setShowEditTeamMember(false)
-    setEditingTeamMember(null)
-  }
+    ));
+    setShowEditTeamMember(false);
+    setEditingTeamMember(null);
+  };
 
   const removeActivity = (id: string) => {
-    setActivities(activities.filter(activity => activity.id !== id))
-  }
+    setActivities(activities.filter(activity => activity.id !== id));
+  };
 
   const removeScheduleItem = (id: string) => {
-    setDayOfSchedule(dayOfSchedule.filter(item => item.id !== id))
-  }
+    setDayOfSchedule(dayOfSchedule.filter(item => item.id !== id));
+  };
 
   const addContact = () => {
     if (newContact.name && newContact.role) {
       const contact: Contact = {
         id: Date.now().toString(),
-        ...newContact
-      }
-      setContacts([...contacts, contact])
+        ...newContact,
+      };
+      setContacts([...contacts, contact]);
       setNewContact({
         name: '',
         email: '',
         phone: '',
         role: '',
         category: 'other',
-        notes: ''
-      })
-      setShowAddContact(false)
+        notes: '',
+      });
+      setShowAddContact(false);
     }
-  }
+  };
 
   const removeContact = (id: string) => {
-    setContacts(contacts.filter(contact => contact.id !== id))
-  }
+    setContacts(contacts.filter(contact => contact.id !== id));
+  };
 
   const printSchedule = () => {
-    if (!event) return
+    if (!event) return;
 
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) return
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
 
     const printContent = `
       <!DOCTYPE html>
@@ -495,9 +485,9 @@ export default function EventLogistics() {
               <strong>Event Lead:</strong> ${event.pointOfContact.name} - ${event.pointOfContact.phone}
             </div>
             ${teamMembers.filter(m => 
-              (m.role.toLowerCase().includes('lead') || m.role.toLowerCase().includes('coordinator')) && 
+    (m.role.toLowerCase().includes('lead') || m.role.toLowerCase().includes('coordinator')) && 
               m.name !== event.pointOfContact.name
-            ).map(member => `
+  ).map(member => `
               <div class="contact-item">
                 <strong>${member.role}:</strong> ${member.name} - ${member.phone}
               </div>
@@ -505,17 +495,17 @@ export default function EventLogistics() {
           </div>
         </body>
       </html>
-    `
+    `;
 
-    printWindow.document.write(printContent)
-    printWindow.document.close()
+    printWindow.document.write(printContent);
+    printWindow.document.close();
     
     // Wait for content to load, then print
     printWindow.onload = () => {
-      printWindow.print()
-      printWindow.close()
-    }
-  }
+      printWindow.print();
+      printWindow.close();
+    };
+  };
 
   if (isLoading) {
     return (
@@ -525,7 +515,7 @@ export default function EventLogistics() {
           <p className="text-gray-600">Loading logistics...</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!event) {
@@ -539,7 +529,7 @@ export default function EventLogistics() {
           </Link>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -617,9 +607,9 @@ export default function EventLogistics() {
                 { id: 'team', label: 'Team Roles', icon: Users, number: 1 },
                 { id: 'activities', label: 'Event Activities', icon: Calendar, number: 2 },
                 { id: 'schedule', label: 'Schedule Items', icon: Clock, number: 3 },
-                { id: 'contacts', label: 'Contact List', icon: User, number: 4 }
+                { id: 'contacts', label: 'Contact List', icon: User, number: 4 },
               ].map((tab) => {
-                const Icon = tab.icon
+                const Icon = tab.icon;
                 return (
                   <button
                     key={tab.id}
@@ -642,7 +632,7 @@ export default function EventLogistics() {
                       <span>{tab.label}</span>
                     </div>
                   </button>
-                )
+                );
               })}
             </nav>
           </div>
@@ -795,8 +785,8 @@ export default function EventLogistics() {
                       <div className="flex justify-end space-x-3 mt-6">
                         <button
                           onClick={() => {
-                            setShowEditTeamMember(false)
-                            setEditingTeamMember(null)
+                            setShowEditTeamMember(false);
+                            setEditingTeamMember(null);
                           }}
                           className="px-4 py-2 text-gray-600 hover:text-gray-800"
                         >
@@ -816,7 +806,7 @@ export default function EventLogistics() {
                 {/* Team Members List */}
                 <div className="space-y-4">
                   {teamMembers.map((member) => {
-                    const isUnassigned = member.name === 'Unassigned'
+                    const isUnassigned = member.name === 'Unassigned';
                     return (
                       <motion.div
                         key={member.id}
@@ -878,7 +868,7 @@ export default function EventLogistics() {
                             <button
                               onClick={() => editTeamMember(member)}
                               className="text-blue-600 hover:text-blue-800"
-                              title={isUnassigned ? "Assign this role" : "Edit team member"}
+                              title={isUnassigned ? 'Assign this role' : 'Edit team member'}
                             >
                               <Edit3 className="h-4 w-4" />
                             </button>
@@ -891,7 +881,7 @@ export default function EventLogistics() {
                           </div>
                         </div>
                       </motion.div>
-                    )
+                    );
                   })}
                 </div>
               </div>
@@ -1130,44 +1120,44 @@ export default function EventLogistics() {
                   {dayOfSchedule
                     .sort((a, b) => a.time.localeCompare(b.time))
                     .map((item) => (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="border rounded-lg p-4"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <div className="flex items-center space-x-2">
-                              <Clock className="h-5 w-5 text-primary-600" />
-                              <span className="font-medium text-gray-900">{item.time}</span>
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="border rounded-lg p-4"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-2">
+                              <div className="flex items-center space-x-2">
+                                <Clock className="h-5 w-5 text-primary-600" />
+                                <span className="font-medium text-gray-900">{item.time}</span>
+                              </div>
+                              <h3 className="font-medium text-gray-900">{item.activity}</h3>
                             </div>
-                            <h3 className="font-medium text-gray-900">{item.activity}</h3>
+                            <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
+                              <div className="flex items-center space-x-1">
+                                <MapPin className="h-4 w-4" />
+                                <span>{item.location}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <User className="h-4 w-4" />
+                                <span>{item.responsible}</span>
+                              </div>
+                            </div>
+                            {item.notes && (
+                              <p className="text-sm text-gray-600">{item.notes}</p>
+                            )}
                           </div>
-                          <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
-                            <div className="flex items-center space-x-1">
-                              <MapPin className="h-4 w-4" />
-                              <span>{item.location}</span>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <User className="h-4 w-4" />
-                              <span>{item.responsible}</span>
-                            </div>
-                          </div>
-                          {item.notes && (
-                            <p className="text-sm text-gray-600">{item.notes}</p>
-                          )}
+                          <button
+                            onClick={() => removeScheduleItem(item.id)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
-                        <button
-                          onClick={() => removeScheduleItem(item.id)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </motion.div>
-                  ))}
+                      </motion.div>
+                    ))}
                 </div>
               </div>
             )}
@@ -1524,5 +1514,5 @@ export default function EventLogistics() {
         </div>
       </main>
     </div>
-  )
+  );
 } 

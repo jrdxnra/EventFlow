@@ -1,10 +1,10 @@
-import type { Metadata } from 'next'
-import './globals.css'
+import type { Metadata } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'EventFlow - Smart Event Planning for Fitness Coaches',
   description: 'AI-powered event planning platform designed specifically for fitness coaches',
-}
+};
 
 export default function RootLayout({
   children,
@@ -19,5 +19,5 @@ export default function RootLayout({
         </div>
       </body>
     </html>
-  )
+  );
 } 
