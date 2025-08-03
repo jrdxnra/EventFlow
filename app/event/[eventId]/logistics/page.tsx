@@ -9,6 +9,11 @@ import { useState, useEffect } from 'react';
 import { getEventById } from '@/lib/firebase-events';
 import { EventData } from '@/lib/types';
 
+// Required for static export - generates empty params since this is a dynamic route
+export async function generateStaticParams() {
+  return [];
+}
+
 interface TeamMember {
   id: string
   name: string
