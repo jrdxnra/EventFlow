@@ -93,8 +93,11 @@ export default function Home() {
         const now = Date.now();
         const cacheAge = now - eventsCacheRef.current.lastFetch[cacheKey];
         
-        // Use cache if it's less than 30 seconds old
-        if (eventsCacheRef.current[cacheKey] && cacheAge < 30000) {
+        // Use cache if it's less than 5 minutes old (increased from 30 seconds)
+        // In development, use longer cache times to prevent excessive reads
+        const cacheTimeout = process.env.NODE_ENV === 'development' ? 600000 : 300000; // 10 min dev, 5 min prod
+        
+        if (eventsCacheRef.current[cacheKey] && cacheAge < cacheTimeout) {
           console.log(`Using cached ${profileType} events (${cacheAge}ms old)`);
           setEvents(eventsCacheRef.current[cacheKey]!);
           
@@ -186,10 +189,29 @@ export default function Home() {
       }
     };
 
+    // Only load events if we have a user and haven't loaded recently
     if (currentUser?.uid) {
-      loadEvents();
+      const profileType = isTeamMode ? 'team' : 'individual';
+      const cacheKey = profileType as 'team' | 'individual';
+      const now = Date.now();
+      const cacheAge = now - eventsCacheRef.current.lastFetch[cacheKey];
+      
+      // Prevent excessive calls - only fetch if cache is old or empty
+      // In development, use longer cache times
+      const cacheTimeout = process.env.NODE_ENV === 'development' ? 600000 : 300000; // 10 min dev, 5 min prod
+      
+      if (!eventsCacheRef.current[cacheKey] || cacheAge > cacheTimeout) {
+        loadEvents();
+      } else {
+        // Use existing cache
+        setEvents(eventsCacheRef.current[cacheKey]!);
+        if (timelineCacheRef.current[cacheKey]) {
+          setEventTimelines(timelineCacheRef.current[cacheKey]!);
+        }
+        setIsLoading(false);
+      }
     }
-  }, [isTeamMode, currentUser?.uid]); // Removed eventsCache dependency to prevent infinite loops
+  }, [isTeamMode, currentUser?.uid]); // Keep dependencies but add cache check
 
   // Removed focus event handler to reduce unnecessary queries
 
