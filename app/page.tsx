@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Calendar, Plus, ChevronLeft, ChevronRight, BarChart3, RefreshCw, Settings } from 'lucide-react';
+import { Calendar, Plus, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect, useMemo, useRef } from 'react';
 
@@ -9,7 +9,7 @@ import EventSidebar from '@/components/Sidebar';
 import UserProfile from '@/components/UserProfile';
 import { updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
 import { getEventsByProfile, MultiProfileEventData } from '@/lib/firebase-multi-profile';
-import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar';
+
 import { EventData } from '@/lib/types';
 
 
@@ -47,7 +47,7 @@ export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'calendar' | 'gantt'>('calendar');
-  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const [expandedTimelines, setExpandedTimelines] = useState<Set<string>>(new Set());
   const [collapsedEventGroups, setCollapsedEventGroups] = useState<Set<string>>(new Set());
   const [eventTimelines, setEventTimelines] = useState<Record<string, TimelineItem[]>>({});
@@ -58,7 +58,7 @@ export default function Home() {
   const [showTimelineItemModal, setShowTimelineItemModal] = useState(false);
   const [selectedTimelineItem, setSelectedTimelineItem] = useState<TimelineItem | null>(null);
   const [selectedTimelineEventId, setSelectedTimelineEventId] = useState<string>('');
-  const [isSyncing, setIsSyncing] = useState(false);
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isTeamMode, setIsTeamMode] = useState(true);
@@ -245,57 +245,7 @@ export default function Home() {
 
 
 
-  const refreshEvents = async () => {
-    setIsRefreshing(true);
-    try {
-      // Clear cache to force fresh data
-      eventsCacheRef.current = {
-        team: null,
-        individual: null,
-        lastFetch: { team: 0, individual: 0 },
-      };
-      
-      // Clear timeline cache as well
-      timelineCacheRef.current = {
-        team: null,
-        individual: null,
-      };
-      
-      // Load events based on current profile mode
-      const profileType = isTeamMode ? 'team' : 'individual';
-      
-      // For team mode, always load team events (no teamId required)
-      const eventsData = await getEventsByProfile(profileType, currentUser?.uid || '');
-      setEvents(eventsData);
-      
-      // Load timeline items from Firebase for each event
-      const timelineData: { [key: string]: TimelineItem[] } = {};
-      for (const event of eventsData) {
-        if (event.timelineItems && event.timelineItems.length > 0) {
-          // Migrate timeline items to have unique IDs if they don't already
-          const migratedTimeline = event.timelineItems.map((item, index) => {
-            // Check if the item has an old hardcoded ID (just a number)
-            if (/^\d+$/.test(item.id)) {
-              return {
-                ...item,
-                id: `${event.id}-${index + 1}`,
-              };
-            }
-            return item;
-          });
-          timelineData[event.id] = migratedTimeline;
-        } else {
-          // Generate timeline if not stored in Firebase
-          timelineData[event.id] = generateTimelineForEvent(event);
-        }
-      }
-      setEventTimelines(timelineData);
-    } catch (error) {
-      console.error('Error refreshing events:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
+
 
   const generateTimelineForEvent = (eventData: MultiProfileEventData): TimelineItem[] => {
     console.log('Generating timeline for event:', eventData.name, eventData);
@@ -457,10 +407,21 @@ export default function Home() {
     try {
       await updateEvent(selectedEvent.id, selectedEvent);
       
-      // Refresh events
+      // Update local state instead of refetching from Firebase
+      setEvents(prevEvents => 
+        prevEvents.map(event => 
+          event.id === selectedEvent.id ? { ...selectedEvent, profileType: event.profileType } as MultiProfileEventData : event
+        )
+      );
+      
+      // Update cache
       const profileType = isTeamMode ? 'team' : 'individual';
-      const eventsData = await getEventsByProfile(profileType, currentUser?.uid || '');
-      setEvents(eventsData);
+      const cacheKey = profileType as 'team' | 'individual';
+      if (eventsCacheRef.current[cacheKey]) {
+        eventsCacheRef.current[cacheKey] = eventsCacheRef.current[cacheKey]!.map(event => 
+          event.id === selectedEvent.id ? { ...selectedEvent, profileType: event.profileType } as MultiProfileEventData : event
+        );
+      }
       
       closeEventInfoModal();
       // Event updated successfully
@@ -504,33 +465,22 @@ export default function Home() {
 
     try {
       await updateEvent(editingEvent.id, editingEvent);
-      // Refresh events
-      const profileType = isTeamMode ? 'team' : 'individual';
-      const eventsData = await getEventsByProfile(profileType, currentUser?.uid || '');
-      setEvents(eventsData);
       
-      // Also refresh timeline data to ensure colors are updated
-      const timelineData: { [key: string]: TimelineItem[] } = {};
-      for (const event of eventsData) {
-        if (event.timelineItems && event.timelineItems.length > 0) {
-          // Migrate timeline items to have unique IDs if they don't already
-          const migratedTimeline = event.timelineItems.map((item, index) => {
-            // Check if the item has an old hardcoded ID (just a number)
-            if (/^\d+$/.test(item.id)) {
-              return {
-                ...item,
-                id: `${event.id}-${index + 1}`,
-              };
-            }
-            return item;
-          });
-          timelineData[event.id] = migratedTimeline;
-        } else {
-          // Generate timeline if not stored in Firebase
-          timelineData[event.id] = generateTimelineForEvent(event);
-        }
+      // Update local state instead of refetching from Firebase
+      setEvents(prevEvents => 
+        prevEvents.map(event => 
+          event.id === editingEvent.id ? { ...editingEvent, profileType: event.profileType } as MultiProfileEventData : event
+        )
+      );
+      
+      // Update cache
+      const profileType = isTeamMode ? 'team' : 'individual';
+      const cacheKey = profileType as 'team' | 'individual';
+      if (eventsCacheRef.current[cacheKey]) {
+        eventsCacheRef.current[cacheKey] = eventsCacheRef.current[cacheKey]!.map(event => 
+          event.id === editingEvent.id ? { ...editingEvent, profileType: event.profileType } as MultiProfileEventData : event
+        );
       }
-      setEventTimelines(timelineData);
       
       closeDetailsModal();
     } catch (error) {
@@ -539,52 +489,7 @@ export default function Home() {
     }
   };
 
-  const syncToGoogleCalendar = async () => {
-    setIsSyncing(true);
-    try {
-      // Get all confirmed timeline items
-      const confirmedItems = Object.values(eventTimelines).flat().filter(item => 
-        item.status === 'confirmed'
-      );
-      
-      if (confirmedItems.length === 0) {
-        alert('No confirmed timeline items to sync!');
-        return;
-      }
 
-      // Create calendar events for each confirmed item
-      const syncPromises = confirmedItems.map(async (item) => {
-        const event = events.find(e => 
-          Object.values(eventTimelines).flat().some(t => t.id === item.id && eventTimelines[e.id]?.includes(t))
-        );
-        
-        if (!event) return null;
-
-        return createTimelineEvent(
-          event.name,
-          item.title,
-          item.dueDate,
-          formatTimeForCalendar(item.dueTime),
-          item.dueDate,
-          formatTimeForCalendar(item.dueTime),
-          event.location,
-          item.description,
-          [event.pointOfContact.email]
-        );
-      });
-
-      const results = await Promise.all(syncPromises);
-      const successfulSyncs = results.filter(r => r !== null).length;
-      
-      alert(`✅ Successfully synced ${successfulSyncs} timeline items to Google Calendar!`);
-      
-    } catch (error) {
-      console.error('Error syncing to Google Calendar:', error);
-      alert('❌ Failed to sync to Google Calendar. Please try again.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
 
 
@@ -805,8 +710,12 @@ export default function Home() {
           {/* Header content aligned with sidebar */}
           <div className="w-[225px] flex-shrink-0 hidden lg:block"></div>
           <div className="flex-1 pr-4 sm:pr-6 lg:pr-8">
-            <div className="flex justify-between items-center py-6">
-              <div className="flex items-center">
+            <div className="grid grid-cols-3 items-center py-6">
+              {/* Left side - empty */}
+              <div></div>
+              
+              {/* Center - EventFlow title */}
+              <div className="flex justify-center">
                 <div className="flex items-center space-x-2">
                   <div className="p-2 bg-gradient-to-r from-primary-600 to-indigo-600 rounded-lg">
                     <Calendar className="h-6 w-6 text-white" />
@@ -819,18 +728,9 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={refreshEvents}
-                  disabled={isRefreshing}
-                  className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
-                  title="Refresh events"
-                >
-                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                </button>
-                <Link href="/config" className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors" title="Configuration">
-                  <Settings className="h-4 w-4" />
-                </Link>
+              
+              {/* Right side - User Profile */}
+              <div className="flex justify-end">
                 <UserProfile 
                   onUserChange={handleUserChange}
                   onTeamModeChange={handleTeamModeChange}
@@ -861,13 +761,13 @@ export default function Home() {
         </div>
 
         {/* Calendar/Timeline - Main Content */}
-        <div className="flex-1 overflow-hidden relative ml-0 transition-all duration-300 ease-in-out">
+        <div className={`flex-1 overflow-hidden relative transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'ml-[60px]' : 'ml-[280px]'}`}>
           <div className="bg-white shadow-sm h-full w-full">
-            <div className={`pr-4 sm:pr-6 lg:pr-8 py-2.5 border-b ${sidebarCollapsed ? 'pl-6 sm:pl-8 lg:pl-10' : 'pl-[120px] sm:pl-[120px] lg:pl-[140px]'}`}>
+            <div className="pr-4 sm:pr-6 lg:pr-8 py-2.5 border-b pl-4 sm:pl-6 lg:pl-8">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
                   {/* Event/Calendar Icon */}
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center">
                     {viewMode === 'calendar' ? (
                       <Calendar className="h-6 w-6 text-primary-600" />
                     ) : (
@@ -945,17 +845,7 @@ export default function Home() {
                     </button>
                   </div>
                     
-                  {/* Sync Button */}
-                  {viewMode === 'calendar' && (
-                    <button
-                      onClick={syncToGoogleCalendar}
-                      disabled={isSyncing}
-                      className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Sync confirmed timeline items to Google Calendar"
-                    >
-                      <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                    </button>
-                  )}
+
                 </div>
               </div>
             </div>
@@ -1057,11 +947,21 @@ export default function Home() {
                               // Updating event with new date
                               await updateEvent(eventId, updatedEvent);
                                 
-                              // Refresh events
-                              // Refreshing events
+                              // Update local state instead of refetching from Firebase
+                              setEvents(prevEvents => 
+                                prevEvents.map(e => 
+                                  e.id === eventId ? { ...updatedEvent, profileType: e.profileType } as MultiProfileEventData : e
+                                )
+                              );
+                              
+                              // Update cache
                               const profileType = isTeamMode ? 'team' : 'individual';
-                              const eventsData = await getEventsByProfile(profileType, currentUser?.uid || '');
-                              setEvents(eventsData);
+                              const cacheKey = profileType as 'team' | 'individual';
+                              if (eventsCacheRef.current[cacheKey]) {
+                                eventsCacheRef.current[cacheKey] = eventsCacheRef.current[cacheKey]!.map(e => 
+                                  e.id === eventId ? { ...updatedEvent, profileType: e.profileType } as MultiProfileEventData : e
+                                );
+                              }
                               // Event moved successfully
                             }
                           } catch (error) {
@@ -1192,7 +1092,7 @@ export default function Home() {
 
             {/* Gantt Timeline */}
             {viewMode === 'gantt' && (
-              <div className={`pr-4 sm:pr-6 lg:pr-8 py-6 overflow-y-auto h-full ${sidebarCollapsed ? 'pl-6 sm:pl-8 lg:pl-10' : 'pl-[120px] sm:pl-[120px] lg:pl-[140px]'}`}>
+              <div className="px-4 sm:px-6 lg:px-8 py-6 overflow-y-auto h-full">
                 {isLoading ? (
                   <div className="text-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
@@ -1646,7 +1546,7 @@ export default function Home() {
               {/* Calendar Event Details */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
                 <h4 className="text-sm font-medium text-blue-900 mb-2">📅 Calendar Event Details</h4>
-                <p className="text-xs text-blue-700">Edit these details before syncing to Google Calendar</p>
+                <p className="text-xs text-blue-700">Edit these details to update your event</p>
               </div>
 
               {/* Basic Calendar Information */}
@@ -1758,7 +1658,7 @@ export default function Home() {
 
             <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
               <div className="text-sm text-gray-600">
-                Make your changes, then save and sync to Google Calendar
+                Make your changes, then save to update your event
               </div>
               <div className="flex space-x-3">
                 <Link
@@ -1782,22 +1682,7 @@ export default function Home() {
                 >
                   Save
                 </button>
-                <button
-                  onClick={async () => {
-                    await handleSelectedEventUpdate();
-                    // After saving, sync to Google Calendar
-                    try {
-                      await syncToGoogleCalendar();
-                      closeEventInfoModal();
-                    } catch (error) {
-                      console.error('Error syncing to calendar:', error);
-                    }
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center space-x-2"
-                >
-                  <Calendar className="h-4 w-4" />
-                  <span>Save & Sync to Calendar</span>
-                </button>
+
               </div>
             </div>
           </motion.div>
