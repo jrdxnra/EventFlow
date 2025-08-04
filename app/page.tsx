@@ -400,53 +400,7 @@ export default function Home() {
 
 
 
-  const toggleTimelineExpanded = (eventId: string) => {
-    setExpandedTimelines(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(eventId)) {
-        newSet.delete(eventId);
-      } else {
-        newSet.add(eventId);
-        // Generate timeline when expanding
-        const event = events.find(e => e.id === eventId);
-        if (event && !eventTimelines[eventId]) {
-          const timeline = generateTimelineForEvent(event);
-          setEventTimelines(prev => ({ ...prev, [eventId]: timeline }));
-        }
-      }
-      return newSet;
-    });
-  };
 
-  const toggleEventGroup = (eventId: string) => {
-    setCollapsedEventGroups(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(eventId)) {
-        newSet.delete(eventId);
-        // Event group expanded
-      } else {
-        newSet.add(eventId);
-        // Event group collapsed
-        
-        // When collapsing an event group, also collapse its timeline if it's expanded
-        setExpandedTimelines(prevTimelines => {
-          const newTimelineSet = new Set(prevTimelines);
-          if (newTimelineSet.has(eventId)) {
-            newTimelineSet.delete(eventId);
-            // Auto-collapsed timeline for event
-          }
-          return newTimelineSet;
-        });
-      }
-      return newSet;
-    });
-  };
-
-  const openDetailsModal = (event: EventData) => {
-    // Opening event details modal
-    setEditingEvent({ ...event });
-    setShowDetailsModal(event.id);
-  };
 
   const closeDetailsModal = () => {
     setShowDetailsModal(null);

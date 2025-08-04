@@ -5,7 +5,7 @@ import { ArrowLeft, Plus, Users, Settings, Trash2, Edit3, Save } from 'lucide-re
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 
-import { getCoaches, createCoach, updateCoach, deleteCoach, getContacts, createContact, deleteContact } from '@/lib/firebase-coaches';
+import { getCoaches, createCoach, deleteCoach, getContacts, createContact, deleteContact } from '@/lib/firebase-coaches';
 import { Coach, Contact } from '@/lib/types';
 
 export default function ConfigPage() {
@@ -22,7 +22,7 @@ export default function ConfigPage() {
     availability: [''],
     bio: '',
   });
-  const [editingCoach, setEditingCoach] = useState<Coach | null>(null);
+
 
   // Contact Management
   const [contacts, setContacts] = useState<Contact[]>([]);

@@ -1,5 +1,5 @@
 import { User } from 'firebase/auth';
-import { collection, addDoc, updateDoc, doc, getDocs, query, getDoc, where, setDoc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, getDocs, query, getDoc, where } from 'firebase/firestore';
 
 import { db } from './firebase';
 
