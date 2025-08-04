@@ -5,15 +5,14 @@ import { ArrowLeft, Plus, Users, Settings, Trash2, Edit3, Save } from 'lucide-re
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 
-import { Coach, Contact } from '@/lib/types';
 import { getCoaches, createCoach, updateCoach, deleteCoach, getContacts, createContact, deleteContact } from '@/lib/firebase-coaches';
+import { Coach, Contact } from '@/lib/types';
 
 export default function ConfigPage() {
   const [activeTab, setActiveTab] = useState<'coaches' | 'contacts' | 'settings'>('coaches');
   
   // Coach Management
   const [coaches, setCoaches] = useState<Coach[]>([]);
-  const [isLoadingCoaches, setIsLoadingCoaches] = useState(true);
   const [showAddCoach, setShowAddCoach] = useState(false);
   const [newCoach, setNewCoach] = useState({
     name: '',
@@ -27,7 +26,6 @@ export default function ConfigPage() {
 
   // Contact Management
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [isLoadingContacts, setIsLoadingContacts] = useState(true);
   const [showAddContact, setShowAddContact] = useState(false);
   const [newContact, setNewContact] = useState({
     name: '',
@@ -85,19 +83,7 @@ export default function ConfigPage() {
     }
   };
 
-  const handleUpdateCoach = async () => {
-    if (!editingCoach) return;
-    
-    try {
-      await updateCoach(editingCoach.id, editingCoach);
-      setCoaches(coaches.map(coach => 
-        coach.id === editingCoach.id ? editingCoach : coach
-      ));
-      setEditingCoach(null);
-    } catch (error) {
-      console.error('Error updating coach:', error);
-    }
-  };
+
 
   const removeCoach = async (id: string) => {
     try {

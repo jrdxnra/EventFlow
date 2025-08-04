@@ -7,7 +7,6 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 
 import { auth } from '@/lib/firebase';
-import { createEvent } from '@/lib/firebase-events';
 import { createEventByProfile } from '@/lib/firebase-multi-profile';
 import { EventData } from '@/lib/types';
 import { validateFormData, EventFormData } from '@/lib/validation';

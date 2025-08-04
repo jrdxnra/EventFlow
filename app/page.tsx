@@ -7,8 +7,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 
 import EventSidebar from '@/components/Sidebar';
 import UserProfile from '@/components/UserProfile';
-import { getEvents, updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
-import { getEventsByProfile, MultiProfileEventData, getMainTeamId } from '@/lib/firebase-multi-profile';
+import { updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
+import { getEventsByProfile, MultiProfileEventData } from '@/lib/firebase-multi-profile';
 import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar';
 import { EventData } from '@/lib/types';
 
@@ -62,7 +62,7 @@ export default function Home() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isTeamMode, setIsTeamMode] = useState(true);
-  const [userProfile, setUserProfile] = useState<any>(null);
+
   
   // Cache for events to prevent unnecessary queries
   const eventsCacheRef = useRef<{
@@ -663,9 +663,7 @@ export default function Home() {
     console.log('Switched to', isTeamMode ? 'team' : 'individual', 'mode');
   };
 
-  const handleUserProfileChange = (profile: any) => {
-    setUserProfile(profile);
-  };
+
 
   // Memoized callback functions to prevent child component re-renders
   const handleToggleTimeline = useMemo(() => (eventId: string) => {
@@ -860,7 +858,6 @@ export default function Home() {
                 <UserProfile 
                   onUserChange={handleUserChange}
                   onTeamModeChange={handleTeamModeChange}
-                  onUserProfileChange={handleUserProfileChange}
                 />
               </div>
             </div>

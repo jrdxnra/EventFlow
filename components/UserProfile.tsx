@@ -6,7 +6,7 @@ import { User, LogOut, Settings, Users, UserCheck, AlertCircle, RefreshCw } from
 import { useState, useEffect } from 'react';
 
 import { auth } from '@/lib/firebase';
-import { initializeUserSession, getUserProfile, UserProfile as UserProfileType } from '@/lib/firebase-users';
+import { initializeUserSession, UserProfile as UserProfileType } from '@/lib/firebase-users';
 
 import UserPreferences from './UserPreferences';
 
