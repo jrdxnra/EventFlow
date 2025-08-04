@@ -18,6 +18,7 @@ export interface EventData {
   time: string
   eventEndTime: string
   location: string
+  eventScope: 'team' | 'individual' // Whether this is a team or individual event
   pointOfContact: {
     name: string
     email: string
@@ -36,6 +37,7 @@ export interface EventData {
   status: 'draft' | 'active' | 'completed'
   color?: string // Calendar color for event distinction
   timelineItems?: TimelineItem[]
+  createdBy: string // User ID who created the event
   createdAt: Date
   updatedAt: Date
 }

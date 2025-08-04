@@ -1,12 +1,14 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Calendar, Plus, ChevronLeft, ChevronRight, BarChart3, RefreshCw, CalendarPlus } from 'lucide-react';
+import { Calendar, Plus, ChevronLeft, ChevronRight, BarChart3, RefreshCw, Settings } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 import EventSidebar from '@/components/Sidebar';
+import UserProfile from '@/components/UserProfile';
 import { getEvents, updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
+import { getEventsByProfile, MultiProfileEventData, getMainTeamId } from '@/lib/firebase-multi-profile';
 import { createTimelineEvent, formatTimeForCalendar } from '@/lib/google-calendar';
 import { EventData } from '@/lib/types';
 
@@ -41,7 +43,7 @@ interface CalendarEvent extends EventData {
 }
 
 export default function Home() {
-  const [events, setEvents] = useState<EventData[]>([]);
+  const [events, setEvents] = useState<MultiProfileEventData[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'calendar' | 'gantt'>('calendar');
@@ -58,17 +60,98 @@ export default function Home() {
   const [selectedTimelineEventId, setSelectedTimelineEventId] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isTeamMode, setIsTeamMode] = useState(true);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  
+  // Cache for events to prevent unnecessary queries
+  const eventsCacheRef = useRef<{
+    team: MultiProfileEventData[] | null;
+    individual: MultiProfileEventData[] | null;
+    lastFetch: { team: number; individual: number };
+  }>({
+    team: null,
+    individual: null,
+    lastFetch: { team: 0, individual: 0 }
+  });
+
+  // Cache for timeline data to prevent regeneration
+  const timelineCacheRef = useRef<{
+    team: Record<string, TimelineItem[]> | null;
+    individual: Record<string, TimelineItem[]> | null;
+  }>({
+    team: null,
+    individual: null
+  });
 
   useEffect(() => {
     const loadEvents = async () => {
       try {
-        const eventsData = await getEvents();
-        // Events loaded successfully
+        // Load events based on current profile mode
+        const profileType = isTeamMode ? 'team' : 'individual';
+        const cacheKey = profileType as 'team' | 'individual';
+        const now = Date.now();
+        const cacheAge = now - eventsCacheRef.current.lastFetch[cacheKey];
+        
+        // Use cache if it's less than 30 seconds old
+        if (eventsCacheRef.current[cacheKey] && cacheAge < 30000) {
+          console.log(`Using cached ${profileType} events (${cacheAge}ms old)`);
+          setEvents(eventsCacheRef.current[cacheKey]!);
+          
+          // Also use cached timeline data if available
+          if (timelineCacheRef.current[cacheKey]) {
+            console.log(`Using cached ${profileType} timeline data`);
+            setEventTimelines(timelineCacheRef.current[cacheKey]!);
+          } else {
+            // Generate timeline data for cached events
+            console.log(`Generating timeline data for cached ${profileType} events`);
+            const timelineData: { [key: string]: TimelineItem[] } = {};
+            for (const event of eventsCacheRef.current[cacheKey]!) {
+              if (event.timelineItems && event.timelineItems.length > 0) {
+                // Migrate timeline items to have unique IDs if they don't already
+                const migratedTimeline = event.timelineItems.map((item, index) => {
+                  // Check if the item has an old hardcoded ID (just a number)
+                  if (/^\d+$/.test(item.id)) {
+                    return {
+                      ...item,
+                      id: `${event.id}-${index + 1}`,
+                    };
+                  }
+                  return item;
+                });
+                timelineData[event.id] = migratedTimeline;
+              } else {
+                // Generate timeline if not stored in Firebase
+                timelineData[event.id] = generateTimelineForEvent(event);
+              }
+            }
+            setEventTimelines(timelineData);
+            // Cache the timeline data
+            timelineCacheRef.current = {
+              ...timelineCacheRef.current,
+              [cacheKey]: timelineData
+            };
+          }
+          return;
+        }
+        
+        console.log(`Fetching fresh ${profileType} events`);
+        const eventsData = await getEventsByProfile(profileType, currentUser?.uid || '');
+        
+        // Update cache
+        eventsCacheRef.current = {
+          ...eventsCacheRef.current,
+          [cacheKey]: eventsData,
+          lastFetch: { ...eventsCacheRef.current.lastFetch, [cacheKey]: now }
+        };
+        
         setEvents(eventsData);
         
         // Load timeline items from Firebase for each event
         const timelineData: { [key: string]: TimelineItem[] } = {};
+        console.log('Processing timeline for events:', eventsData.length);
         for (const event of eventsData) {
+          console.log('Processing event:', event.name, 'has timelineItems:', event.timelineItems?.length || 0);
           if (event.timelineItems && event.timelineItems.length > 0) {
             // Migrate timeline items to have unique IDs if they don't already
             const migratedTimeline = event.timelineItems.map((item, index) => {
@@ -82,12 +165,20 @@ export default function Home() {
               return item;
             });
             timelineData[event.id] = migratedTimeline;
+            console.log('Using existing timeline items for', event.name, ':', migratedTimeline.length);
           } else {
             // Generate timeline if not stored in Firebase
+            console.log('Generating new timeline for', event.name);
             timelineData[event.id] = generateTimelineForEvent(event);
           }
         }
         setEventTimelines(timelineData);
+        
+        // Cache the timeline data
+        timelineCacheRef.current = {
+          ...timelineCacheRef.current,
+          [cacheKey]: timelineData
+        };
       } catch (error) {
         console.error('Error loading events:', error);
       } finally {
@@ -95,27 +186,12 @@ export default function Home() {
       }
     };
 
-    loadEvents();
-  }, []);
-
-  // Refresh events when returning to the page
-  useEffect(() => {
-    const handleFocus = () => {
-      // Refresh events when user returns to the tab
-      const loadEvents = async () => {
-        try {
-          const eventsData = await getEvents();
-          setEvents(eventsData);
-        } catch (error) {
-          console.error('Error loading events:', error);
-        }
-      };
+    if (currentUser?.uid) {
       loadEvents();
-    };
+    }
+  }, [isTeamMode, currentUser?.uid]); // Removed eventsCache dependency to prevent infinite loops
 
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
+  // Removed focus event handler to reduce unnecessary queries
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -126,27 +202,6 @@ export default function Home() {
     const startingDayOfWeek = firstDay.getDay();
     
     return { daysInMonth, startingDayOfWeek };
-  };
-
-  const getEventsForDate = (date: Date) => {
-    const dateString = date.toISOString().split('T')[0];
-    const eventEvents = events.filter(event => event.date === dateString);
-    
-    // Add confirmed timeline items for this date
-    const timelineEvents = Object.values(eventTimelines).flat().filter(item => 
-      item.dueDate === dateString && item.status === 'confirmed'
-    ).map(item => ({
-      id: `timeline-${item.id}`,
-      name: item.title,
-      date: item.dueDate,
-      time: item.dueTime,
-      location: 'Timeline Task',
-      status: 'confirmed' as const,
-      category: item.category,
-      isTimelineItem: true,
-    }));
-    
-    return [...eventEvents, ...timelineEvents];
   };
 
   const isToday = (date: Date) => {
@@ -171,7 +226,24 @@ export default function Home() {
   const refreshEvents = async () => {
     setIsRefreshing(true);
     try {
-      const eventsData = await getEvents();
+      // Clear cache to force fresh data
+      eventsCacheRef.current = {
+        team: null,
+        individual: null,
+        lastFetch: { team: 0, individual: 0 }
+      };
+      
+      // Clear timeline cache as well
+      timelineCacheRef.current = {
+        team: null,
+        individual: null
+      };
+      
+      // Load events based on current profile mode
+      const profileType = isTeamMode ? 'team' : 'individual';
+      
+      // For team mode, always load team events (no teamId required)
+      const eventsData = await getEventsByProfile(profileType, currentUser?.uid || '');
       setEvents(eventsData);
       
       // Load timeline items from Firebase for each event
@@ -203,7 +275,9 @@ export default function Home() {
     }
   };
 
-  const generateTimelineForEvent = (eventData: EventData): TimelineItem[] => {
+  const generateTimelineForEvent = (eventData: MultiProfileEventData): TimelineItem[] => {
+    console.log('Generating timeline for event:', eventData.name, eventData);
+    
     // Ensure we have a valid date string
     if (!eventData.date) {
       console.warn('Event has no date, cannot generate timeline');
@@ -320,6 +394,7 @@ export default function Home() {
       priority: 'high',
     });
 
+    console.log('Generated timeline items:', timeline.length, timeline);
     return timeline.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   };
 
@@ -407,7 +482,8 @@ export default function Home() {
       await updateEvent(selectedEvent.id, selectedEvent);
       
       // Refresh events
-      const eventsData = await getEvents();
+      const profileType = isTeamMode ? 'team' : 'individual';
+      const eventsData = await getEventsByProfile(profileType, currentUser?.uid || '');
       setEvents(eventsData);
       
       closeEventInfoModal();
@@ -453,7 +529,8 @@ export default function Home() {
     try {
       await updateEvent(editingEvent.id, editingEvent);
       // Refresh events
-      const eventsData = await getEvents();
+      const profileType = isTeamMode ? 'team' : 'individual';
+      const eventsData = await getEventsByProfile(profileType, currentUser?.uid || '');
       setEvents(eventsData);
       
       // Also refresh timeline data to ensure colors are updated
@@ -541,36 +618,7 @@ export default function Home() {
 
 
 
-  const generateGanttData = (): GanttItem[] => {
-    const ganttData: GanttItem[] = [];
-    
-    // Only include timeline items from expanded events (dash doesn't affect Gantt chart)
-    events.forEach(event => {
-      if (expandedTimelines.has(event.id) && eventTimelines[event.id]) {
-        eventTimelines[event.id]?.forEach(timelineItem => {
-          const startDate = new Date(timelineItem.dueDate + ' ' + timelineItem.dueTime);
-          const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // 2 hour duration default
-          
-          // Create a unique ID for Gantt items to avoid conflicts
-          const uniqueId = `${event.id}-${timelineItem.id}-gantt`;
-          
-          ganttData.push({
-            id: uniqueId,
-            eventId: event.id,
-            eventName: event.name,
-            task: timelineItem.title,
-            start: startDate,
-            end: endDate,
-            category: timelineItem.category,
-            status: timelineItem.status === 'confirmed' ? 'completed' : 'pending',
-            eventColor: event.color || '#10B981', // Add event color to Gantt items
-          });
-        });
-      }
-    });
-    
-    return ganttData.sort((a, b) => a.start.getTime() - b.start.getTime());
-  };
+
 
 
 
@@ -606,7 +654,139 @@ export default function Home() {
     return abbreviations[title] || title.length > 20 ? title.substring(0, 20) + '...' : title;
   };
 
-  const getWeekGridLines = () => {
+  const handleUserChange = (user: any) => {
+    setCurrentUser(user);
+  };
+
+  const handleTeamModeChange = (isTeamMode: boolean) => {
+    setIsTeamMode(isTeamMode);
+    console.log('Switched to', isTeamMode ? 'team' : 'individual', 'mode');
+  };
+
+  const handleUserProfileChange = (profile: any) => {
+    setUserProfile(profile);
+  };
+
+  // Memoized callback functions to prevent child component re-renders
+  const handleToggleTimeline = useMemo(() => (eventId: string) => {
+    setExpandedTimelines(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(eventId)) {
+        newSet.delete(eventId);
+      } else {
+        newSet.add(eventId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleToggleEventGroup = useMemo(() => (eventId: string) => {
+    setCollapsedEventGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(eventId)) {
+        newSet.delete(eventId);
+      } else {
+        newSet.add(eventId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleOpenDetailsModal = useMemo(() => (event: EventData) => {
+    setShowDetailsModal(event.id);
+    setEditingEvent(event);
+  }, []);
+
+  const handleTimelineItemClick = useMemo(() => (eventId: string, item: TimelineItem) => {
+    setSelectedTimelineItem(item);
+    setSelectedTimelineEventId(eventId);
+    setShowTimelineItemModal(true);
+  }, []);
+
+  const handleToggleCollapsed = useMemo(() => () => {
+    setSidebarCollapsed(prev => !prev);
+  }, []);
+
+  // Events are now loaded from separate data sources based on profile mode
+  const filteredEvents = useMemo(() => {
+    return events;
+  }, [events]);
+
+  // Memoized event timelines to prevent unnecessary re-renders
+  const memoizedEventTimelines = useMemo(() => eventTimelines, [eventTimelines]);
+
+  // Memoized function to get events for a specific date
+  const getEventsForDate = useMemo(() => {
+    return (date: Date) => {
+      const dateString = date.toISOString().split('T')[0];
+      const eventEvents = filteredEvents.filter(event => event.date === dateString);
+      
+      // Add confirmed timeline items for this date (only for team mode or user's own events)
+      const timelineEvents = Object.values(memoizedEventTimelines).flat().filter(item => 
+        item.dueDate === dateString && item.status === 'confirmed'
+      ).map(item => ({
+        id: `timeline-${item.id}`,
+        name: item.title,
+        date: item.dueDate,
+        time: item.dueTime,
+        location: 'Timeline Task',
+        status: 'confirmed' as const,
+        category: item.category,
+        isTimelineItem: true,
+      }));
+      
+      return [...eventEvents, ...timelineEvents];
+    };
+  }, [filteredEvents, memoizedEventTimelines]);
+
+  // Memoized Gantt data generation
+  const generateGanttData = useMemo((): GanttItem[] => {
+    const ganttData: GanttItem[] = [];
+    
+    // Only include timeline items from expanded events (dash doesn't affect Gantt chart)
+    filteredEvents.forEach(event => {
+      if (expandedTimelines.has(event.id) && memoizedEventTimelines[event.id]) {
+        memoizedEventTimelines[event.id]?.forEach(timelineItem => {
+          const startDate = new Date(timelineItem.dueDate + ' ' + timelineItem.dueTime);
+          const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // 2 hour duration default
+          
+          // Create a unique ID for Gantt items to avoid conflicts
+          const uniqueId = `${event.id}-${timelineItem.id}-gantt`;
+          
+          ganttData.push({
+            id: uniqueId,
+            eventId: event.id,
+            eventName: event.name,
+            task: timelineItem.title,
+            start: startDate,
+            end: endDate,
+            category: timelineItem.category,
+            status: timelineItem.status === 'confirmed' ? 'completed' : 'pending',
+            eventColor: event.color || '#10B981', // Add event color to Gantt items
+          });
+        });
+      }
+    });
+    
+    return ganttData.sort((a, b) => a.start.getTime() - b.start.getTime());
+  }, [filteredEvents, expandedTimelines, memoizedEventTimelines]);
+
+  const getWeekNumber = (date: Date) => {
+    // Get the first Thursday of the year
+    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+    const firstThursday = new Date(firstDayOfYear);
+    firstThursday.setDate(firstDayOfYear.getDate() + (4 - firstDayOfYear.getDay() + 7) % 7);
+    
+    // Get the first day of the week containing the first Thursday
+    const firstWeekStart = new Date(firstThursday);
+    firstWeekStart.setDate(firstThursday.getDate() - 3);
+    
+    // Calculate the week number
+    const daysDiff = (date.getTime() - firstWeekStart.getTime()) / (1000 * 60 * 60 * 24);
+    return Math.floor(daysDiff / 7) + 1;
+  };
+
+  const getWeekGridLines = useMemo(() => {
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
     const totalDays = endOfMonth.getDate();
@@ -630,22 +810,9 @@ export default function Home() {
     }
     
     return weeks;
-  };
+  }, [currentDate]);
 
-  const getWeekNumber = (date: Date) => {
-    // Get the first Thursday of the year
-    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-    const firstThursday = new Date(firstDayOfYear);
-    firstThursday.setDate(firstDayOfYear.getDate() + (4 - firstDayOfYear.getDay() + 7) % 7);
-    
-    // Get the first day of the week containing the first Thursday
-    const firstWeekStart = new Date(firstThursday);
-    firstWeekStart.setDate(firstThursday.getDate() - 3);
-    
-    // Calculate the week number
-    const daysDiff = (date.getTime() - firstWeekStart.getTime()) / (1000 * 60 * 60 * 24);
-    return Math.floor(daysDiff / 7) + 1;
-  };
+
 
   const { daysInMonth, startingDayOfWeek } = getDaysInMonth(currentDate);
   const currentYear = new Date().getFullYear();
@@ -665,14 +832,19 @@ export default function Home() {
           <div className="w-[225px] flex-shrink-0 hidden lg:block"></div>
           <div className="flex-1 pr-4 sm:pr-6 lg:pr-8">
             <div className="flex justify-between items-center py-6">
-              <div className="flex items-center">
-                <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-gradient-to-r from-primary-600 to-indigo-600 rounded-lg">
-                    <Calendar className="h-6 w-6 text-white" />
+                              <div className="flex items-center">
+                  <div className="flex items-center space-x-2">
+                    <div className="p-2 bg-gradient-to-r from-primary-600 to-indigo-600 rounded-lg">
+                      <Calendar className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EventFlow</h1>
+                      <p className="text-sm text-gray-500">
+                        {isTeamMode ? 'Team Dashboard' : 'Individual Dashboard'}
+                      </p>
+                    </div>
                   </div>
-                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EventFlow</h1>
                 </div>
-              </div>
               <div className="flex items-center space-x-4">
                 <button
                   onClick={refreshEvents}
@@ -682,9 +854,14 @@ export default function Home() {
                 >
                   <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 </button>
-                <Link href="/event-setup" className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors">
-                  <CalendarPlus className="h-4 w-4" />
+                <Link href="/config" className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors" title="Configuration">
+                  <Settings className="h-4 w-4" />
                 </Link>
+                <UserProfile 
+                  onUserChange={handleUserChange}
+                  onTeamModeChange={handleTeamModeChange}
+                  onUserProfileChange={handleUserProfileChange}
+                />
               </div>
             </div>
           </div>
@@ -696,18 +873,17 @@ export default function Home() {
         {/* Sidebar */}
         <div className={`flex-shrink-0 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'w-[60px]' : 'w-[225px]'}`}>
           <EventSidebar
-            events={events}
+            events={filteredEvents}
             isLoading={isLoading}
             expandedTimelines={expandedTimelines}
             collapsedEventGroups={collapsedEventGroups}
-            eventTimelines={eventTimelines}
+            eventTimelines={memoizedEventTimelines}
             collapsed={sidebarCollapsed}
-            onToggleTimeline={toggleTimelineExpanded}
-            onToggleEventGroup={toggleEventGroup}
-            onOpenDetailsModal={openDetailsModal}
-            onTimelineItemClick={(eventId, item) => openTimelineItemModal(item, eventId)}
-
-            onToggleCollapsed={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onToggleTimeline={handleToggleTimeline}
+            onToggleEventGroup={handleToggleEventGroup}
+            onOpenDetailsModal={handleOpenDetailsModal}
+            onTimelineItemClick={handleTimelineItemClick}
+            onToggleCollapsed={handleToggleCollapsed}
           />
         </div>
 
@@ -910,7 +1086,8 @@ export default function Home() {
                                 
                               // Refresh events
                               // Refreshing events
-                              const eventsData = await getEvents();
+                              const profileType = isTeamMode ? 'team' : 'individual';
+                              const eventsData = await getEventsByProfile(profileType, currentUser?.uid || '');
                               setEvents(eventsData);
                               // Event moved successfully
                             }
@@ -1008,6 +1185,16 @@ export default function Home() {
                                   }
                                 }
                               }}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                // For regular events, open logistics page
+                                if (!(event as CalendarEvent).isTimelineItem) {
+                                  const actualEvent = events.find(e => e.id === event.id);
+                                          if (actualEvent) {
+          window.open(`/logistics?eventId=${actualEvent.id}`, '_blank');
+        }
+                                }
+                              }}
                             >
                               <div className="font-medium truncate">
                                 {event.name}
@@ -1048,7 +1235,7 @@ export default function Home() {
                         Create Event
                     </Link>
                   </div>
-                ) : generateGanttData().length === 0 ? (
+                ) : generateGanttData.length === 0 ? (
                   <div className="text-center py-8">
                     <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h4 className="text-lg font-medium text-gray-900 mb-2">No timeline items to display</h4>
@@ -1072,7 +1259,7 @@ export default function Home() {
                         </div>
                         {/* Week Labels */}
                         <div className="flex relative">
-                          {getWeekGridLines().map((week, index) => (
+                          {getWeekGridLines.map((week, index) => (
                             <div
                               key={index}
                               className="absolute text-xs text-gray-500 font-medium"
@@ -1089,7 +1276,7 @@ export default function Home() {
                         
                       {/* Gantt Bars */}
                       <div className="p-4 space-y-3">
-                        {generateGanttData().map((item) => (
+                        {generateGanttData.map((item) => (
                           <motion.div
                             key={item.id}
                             initial={{ opacity: 0, x: -20 }}
@@ -1114,7 +1301,7 @@ export default function Home() {
                             <div className="flex-1 relative">
                               <div className="relative h-8 bg-gray-100 rounded-lg overflow-hidden">
                                 {/* Week Grid Lines */}
-                                {getWeekGridLines().map((week, index) => (
+                                {getWeekGridLines.map((week, index) => (
                                   <div
                                     key={index}
                                     className="absolute top-0 bottom-0 border-l border-gray-300"
@@ -1601,6 +1788,15 @@ export default function Home() {
                 Make your changes, then save and sync to Google Calendar
               </div>
               <div className="flex space-x-3">
+                <Link
+                  href={`/logistics?eventId=${selectedEvent.id}`}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span>View Logistics</span>
+                </Link>
                 <button
                   onClick={closeEventInfoModal}
                   className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"

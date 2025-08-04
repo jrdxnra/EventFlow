@@ -4,7 +4,7 @@ import { db } from './firebase';
 import { EventData, TimelineItem } from './types';
 import { EventFormData } from './validation';
 
-export const createEvent = async (formData: EventFormData): Promise<string> => {
+export const createEvent = async (formData: EventFormData, userId?: string): Promise<string> => {
   try {
     // Transform EventFormData to Event interface
     const eventData: Omit<EventData, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -13,6 +13,7 @@ export const createEvent = async (formData: EventFormData): Promise<string> => {
       time: formData.eventTime,
       eventEndTime: formData.eventEndTime,
       location: formData.eventLocation,
+      eventScope: formData.eventScope,
       pointOfContact: {
         name: formData.pointOfContact.name,
         email: formData.pointOfContact.email,
@@ -29,6 +30,7 @@ export const createEvent = async (formData: EventFormData): Promise<string> => {
       otherNotes: formData.otherNotes || '',
       eventType: formData.eventType || '',
       status: 'draft',
+      createdBy: userId || 'unknown', // Track who created the event
     };
 
     console.log('Sending data to Firebase:', eventData);

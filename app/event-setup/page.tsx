@@ -8,7 +8,9 @@ import { useState, useEffect } from 'react';
 
 import { auth } from '@/lib/firebase';
 import { createEvent } from '@/lib/firebase-events';
+import { createEventByProfile } from '@/lib/firebase-multi-profile';
 import { validateFormData, EventFormData } from '@/lib/validation';
+import { EventData } from '@/lib/types';
 
 
 // Quick-fill templates for different event types
@@ -21,6 +23,7 @@ const eventTemplates = [
     color: 'bg-green-500',
     defaults: {
       eventType: 'popup-class',
+      eventScope: 'team' as const, // Pop-up classes are typically team events
       marketingChannels: ['media', 'email'],
       coachSupport: 'solo',
       specialRequirements: 'Portable equipment, outdoor space',
@@ -34,6 +37,7 @@ const eventTemplates = [
     color: 'bg-blue-500',
     defaults: {
       eventType: 'workshop',
+      eventScope: 'team' as const, // Workshops are typically team events
       marketingChannels: ['media', 'email', 'flyers'],
       coachSupport: 'team',
       specialRequirements: 'Classroom setup, presentation materials',
@@ -47,6 +51,7 @@ const eventTemplates = [
     color: 'bg-purple-500',
     defaults: {
       eventType: 'challenge',
+      eventScope: 'team' as const, // Challenges are typically team events
       marketingChannels: ['media', 'email', 'collaborations'],
       coachSupport: 'team',
       specialRequirements: 'Progress tracking, daily check-ins',
@@ -60,6 +65,7 @@ const eventTemplates = [
     color: 'bg-orange-500',
     defaults: {
       eventType: 'seminar',
+      eventScope: 'team' as const, // Seminars are typically team events
       marketingChannels: ['media', 'email', 'flyers', 'collaborations'],
       coachSupport: 'full-support',
       specialRequirements: 'Venue with presentation capabilities, catering',
@@ -103,6 +109,7 @@ export default function EventSetup() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [createdEventId, setCreatedEventId] = useState<string | null>(null);
 
   
   const [formData, setFormData] = useState<EventFormData>({
@@ -111,6 +118,7 @@ export default function EventSetup() {
     eventTime: '',
     eventEndTime: '',
     eventLocation: '',
+    eventScope: 'team', // Default to team events
     pointOfContact: {
       name: '',
       email: '',
@@ -194,7 +202,14 @@ export default function EventSetup() {
     setSelectedTemplate(templateId);
     const template = eventTemplates.find(t => t.id === templateId);
     if (template) {
-      setFormData(prev => ({ ...prev, ...template.defaults }));
+      setFormData(prev => ({
+        ...prev,
+        eventType: template.defaults.eventType,
+        eventScope: template.defaults.eventScope,
+        marketingChannels: template.defaults.marketingChannels,
+        coachSupport: template.defaults.coachSupport,
+        specialRequirements: template.defaults.specialRequirements,
+      }));
     }
   };
 
@@ -298,8 +313,48 @@ export default function EventSetup() {
         return;
       }
 
-      // Save to Firebase now that we have authentication
-      await createEvent(formData);
+      // Save to Firebase based on event scope
+      const profileType = formData.eventScope;
+      const teamId = 'default-team'; // TODO: Get actual team ID from user profile
+      const eventId = await createEventByProfile(formData, profileType, user?.uid || '', teamId);
+      
+      // Also store in localStorage for static site logistics
+      if (eventId) {
+        const eventData: EventData = {
+          id: eventId,
+          name: formData.eventName,
+          date: formData.eventDate,
+          time: formData.eventTime,
+          eventEndTime: formData.eventEndTime,
+          location: formData.eventLocation,
+          eventScope: formData.eventScope,
+          pointOfContact: {
+            name: formData.pointOfContact.name,
+            email: formData.pointOfContact.email,
+            phone: formData.pointOfContact.phone || '',
+          },
+          eventPurpose: formData.eventPurpose,
+          coachSupport: formData.coachSupport,
+          marketingChannels: formData.marketingChannels,
+          ticketingNeeds: formData.ticketingNeeds || '',
+          gemsDetails: formData.gemsDetails || '',
+          specialRequirements: formData.specialRequirements || '',
+          otherNotes: formData.otherNotes || '',
+          eventType: formData.eventType || '',
+          status: 'draft',
+          createdBy: user?.uid || 'unknown',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        
+        const storedEvents = localStorage.getItem('events');
+        const events = storedEvents ? JSON.parse(storedEvents) : [];
+        events.push(eventData);
+        localStorage.setItem('events', JSON.stringify(events));
+        
+        // Store the event ID for the success screen
+        setCreatedEventId(eventId);
+      }
       
       // Clear draft after successful submission
       localStorage.removeItem('eventflow-draft');
@@ -437,6 +492,63 @@ export default function EventSetup() {
                 <p className="form-error flex items-center">
                   <AlertCircle className="h-4 w-4 mr-1" />
                   {getFieldError('eventLocation')}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="form-label">Event Scope *</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    formData.eventScope === 'team'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => handleInputChange('eventScope', 'team')}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-4 h-4 rounded-full border-2 ${
+                      formData.eventScope === 'team' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                    }`}>
+                      {formData.eventScope === 'team' && (
+                        <div className="w-2 h-2 bg-white rounded-full m-0.5"></div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900">Team Event</h4>
+                      <p className="text-sm text-gray-600">Visible to all team members</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    formData.eventScope === 'individual'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => handleInputChange('eventScope', 'individual')}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-4 h-4 rounded-full border-2 ${
+                      formData.eventScope === 'individual' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                    }`}>
+                      {formData.eventScope === 'individual' && (
+                        <div className="w-2 h-2 bg-white rounded-full m-0.5"></div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900">Personal Event</h4>
+                      <p className="text-sm text-gray-600">Only visible to you</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {getFieldError('eventScope') && (
+                <p className="form-error flex items-center">
+                  <AlertCircle className="h-4 w-4 mr-1" />
+                  {getFieldError('eventScope')}
                 </p>
               )}
             </div>
@@ -808,15 +920,30 @@ export default function EventSetup() {
 
             <div className="space-y-4">
               <Link
-                href="/"
+                href={createdEventId ? `/logistics?eventId=${createdEventId}` : '/logistics'}
                 className="w-full bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 text-center block"
               >
-                View Event in Dashboard
+                View Event Logistics
               </Link>
+              
+              <div className="text-center">
+                <p className="text-sm text-gray-600 mb-2">What happens next?</p>
+                <div className="space-y-2 text-sm text-gray-500">
+                  <p>• Your event will appear in the sidebar</p>
+                  <p>• You can add timeline items and tasks</p>
+                  <p>• View it in Calendar or Timeline mode</p>
+                  <p>• Sync confirmed tasks to Google Calendar</p>
+                </div>
+              </div>
             </div>
 
             <div className="mt-6 text-sm text-gray-500">
-              <p>Event created successfully! You can now view it in your dashboard.</p>
+              <p>
+                {formData.eventScope === 'team' 
+                  ? 'Team event created successfully! It will be visible to all team members.'
+                  : 'Personal event created successfully! It will only be visible to you.'
+                }
+              </p>
             </div>
           </div>
         </div>

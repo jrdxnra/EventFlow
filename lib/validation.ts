@@ -6,6 +6,7 @@ export const eventFormSchema = z.object({
   eventTime: z.string().min(1, 'Event time is required'),
   eventEndTime: z.string().min(1, 'Event end time is required'),
   eventLocation: z.string().min(1, 'Event location is required'),
+  eventScope: z.enum(['team', 'individual'], { required_error: 'Please select event scope' }),
   pointOfContact: z.object({
     name: z.string().min(1, 'Contact name is required'),
     email: z.string().email('Valid email is required'),
