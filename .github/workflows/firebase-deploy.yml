@@ -24,9 +24,7 @@ jobs:
       run: npm ci
       
     - name: Build application
-      run: npm run build:static
-      env:
-        NODE_ENV: production
+      run: npm run build
         
     - name: Deploy to Firebase
       uses: FirebaseExtended/action-hosting-deploy@v0

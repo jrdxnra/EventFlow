@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --turbo",
     "dev:fast": "next dev --turbo",
-    "build": "next build",
+    "build": "NODE_ENV=production next build",
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
@@ -14,8 +14,7 @@
     "format:check": "prettier --check .",
     "check-all": "npm run type-check && npm run lint && npm run format:check",
     "clean": "rm -rf .next && rm -rf node_modules/.cache",
-    "dev:clean": "npm run clean && npm run dev",
-    "build:static": "NODE_ENV=production next build"
+    "dev:clean": "npm run clean && npm run dev"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
