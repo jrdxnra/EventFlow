@@ -103,7 +103,7 @@ export default function EventSetup() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [createdEventId, setCreatedEventId] = useState<string>('');
+
   
   const [formData, setFormData] = useState<EventFormData>({
     eventName: '',
@@ -299,13 +299,12 @@ export default function EventSetup() {
       }
 
       // Save to Firebase now that we have authentication
-      const eventId = await createEvent(formData);
+      await createEvent(formData);
       
       // Clear draft after successful submission
       localStorage.removeItem('eventflow-draft');
       
       // Show success screen
-      setCreatedEventId(eventId);
       setShowSuccess(true);
       setIsSubmitting(false);
     } catch (error) {
@@ -808,16 +807,16 @@ export default function EventSetup() {
             </div>
 
             <div className="space-y-4">
-              <button
-                onClick={() => window.location.href = `/event/${createdEventId}/logistics`}
-                className="w-full bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              <Link
+                href="/"
+                className="w-full bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 text-center block"
               >
-                Setup Day-of Logistics
-              </button>
+                View Event in Dashboard
+              </Link>
             </div>
 
             <div className="mt-6 text-sm text-gray-500">
-              <p>Event ID: {createdEventId}</p>
+              <p>Event created successfully! You can now view it in your dashboard.</p>
             </div>
           </div>
         </div>

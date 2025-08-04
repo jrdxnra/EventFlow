@@ -36,6 +36,10 @@ interface TimelineItem {
   notes?: string;
 }
 
+interface CalendarEvent extends EventData {
+  isTimelineItem?: boolean;
+}
+
 export default function Home() {
   const [events, setEvents] = useState<EventData[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -933,7 +937,7 @@ export default function Home() {
                               key={event.id}
                               className={'text-xs p-1 rounded cursor-move text-left hover:opacity-80'}
                               style={{
-                                backgroundColor: (event as any).isTimelineItem 
+                                backgroundColor: (event as CalendarEvent).isTimelineItem
                                   ? (() => {
                                     // For timeline items, find the parent event color
                                     const parentEvent = events.find(e => {
@@ -947,7 +951,7 @@ export default function Home() {
                               }}
                               draggable
                               onDragStart={(e) => {
-                                if ((event as any).isTimelineItem) {
+                                if ((event as CalendarEvent).isTimelineItem) {
                                   // For timeline items, we need to find the parent event
                                   const parentEvent = events.find(e => {
                                     const timeline = eventTimelines[e.id];
@@ -983,7 +987,7 @@ export default function Home() {
                                 }
                               }}
                               onClick={() => {
-                                if ((event as any).isTimelineItem) {
+                                if ((event as CalendarEvent).isTimelineItem) {
                                   // For timeline items, find the parent event and timeline item
                                   const parentEvent = events.find(e => {
                                     const timeline = eventTimelines[e.id];
