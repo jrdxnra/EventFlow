@@ -193,10 +193,12 @@ export const getEventLogistics = async (eventId: string): Promise<EventLogistics
     
     if (!querySnapshot.empty) {
       const doc = querySnapshot.docs[0];
-      return {
-        id: doc.id,
-        ...doc.data(),
-      } as EventLogistics;
+      if (doc) {
+        return {
+          id: doc.id,
+          ...doc.data(),
+        } as EventLogistics;
+      }
     }
     return null;
   } catch (error) {

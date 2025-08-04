@@ -72,7 +72,7 @@ export default function Home() {
   }>({
     team: null,
     individual: null,
-    lastFetch: { team: 0, individual: 0 }
+    lastFetch: { team: 0, individual: 0 },
   });
 
   // Cache for timeline data to prevent regeneration
@@ -81,7 +81,7 @@ export default function Home() {
     individual: Record<string, TimelineItem[]> | null;
   }>({
     team: null,
-    individual: null
+    individual: null,
   });
 
   useEffect(() => {
@@ -129,7 +129,7 @@ export default function Home() {
             // Cache the timeline data
             timelineCacheRef.current = {
               ...timelineCacheRef.current,
-              [cacheKey]: timelineData
+              [cacheKey]: timelineData,
             };
           }
           return;
@@ -142,7 +142,7 @@ export default function Home() {
         eventsCacheRef.current = {
           ...eventsCacheRef.current,
           [cacheKey]: eventsData,
-          lastFetch: { ...eventsCacheRef.current.lastFetch, [cacheKey]: now }
+          lastFetch: { ...eventsCacheRef.current.lastFetch, [cacheKey]: now },
         };
         
         setEvents(eventsData);
@@ -177,7 +177,7 @@ export default function Home() {
         // Cache the timeline data
         timelineCacheRef.current = {
           ...timelineCacheRef.current,
-          [cacheKey]: timelineData
+          [cacheKey]: timelineData,
         };
       } catch (error) {
         console.error('Error loading events:', error);
@@ -230,13 +230,13 @@ export default function Home() {
       eventsCacheRef.current = {
         team: null,
         individual: null,
-        lastFetch: { team: 0, individual: 0 }
+        lastFetch: { team: 0, individual: 0 },
       };
       
       // Clear timeline cache as well
       timelineCacheRef.current = {
         team: null,
-        individual: null
+        individual: null,
       };
       
       // Load events based on current profile mode
@@ -832,19 +832,19 @@ export default function Home() {
           <div className="w-[225px] flex-shrink-0 hidden lg:block"></div>
           <div className="flex-1 pr-4 sm:pr-6 lg:pr-8">
             <div className="flex justify-between items-center py-6">
-                              <div className="flex items-center">
-                  <div className="flex items-center space-x-2">
-                    <div className="p-2 bg-gradient-to-r from-primary-600 to-indigo-600 rounded-lg">
-                      <Calendar className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EventFlow</h1>
-                      <p className="text-sm text-gray-500">
-                        {isTeamMode ? 'Team Dashboard' : 'Individual Dashboard'}
-                      </p>
-                    </div>
+              <div className="flex items-center">
+                <div className="flex items-center space-x-2">
+                  <div className="p-2 bg-gradient-to-r from-primary-600 to-indigo-600 rounded-lg">
+                    <Calendar className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EventFlow</h1>
+                    <p className="text-sm text-gray-500">
+                      {isTeamMode ? 'Team Dashboard' : 'Individual Dashboard'}
+                    </p>
                   </div>
                 </div>
+              </div>
               <div className="flex items-center space-x-4">
                 <button
                   onClick={refreshEvents}
@@ -1190,9 +1190,9 @@ export default function Home() {
                                 // For regular events, open logistics page
                                 if (!(event as CalendarEvent).isTimelineItem) {
                                   const actualEvent = events.find(e => e.id === event.id);
-                                          if (actualEvent) {
-          window.open(`/logistics?eventId=${actualEvent.id}`, '_blank');
-        }
+                                  if (actualEvent) {
+                                    window.open(`/logistics?eventId=${actualEvent.id}`, '_blank');
+                                  }
                                 }
                               }}
                             >

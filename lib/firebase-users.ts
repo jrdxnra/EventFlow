@@ -1,5 +1,5 @@
-import { collection, addDoc, updateDoc, doc, getDocs, query, orderBy, getDoc, deleteDoc, where, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
+import { collection, addDoc, updateDoc, doc, getDocs, query, orderBy, getDoc, deleteDoc, where, setDoc } from 'firebase/firestore';
 
 import { db } from './firebase';
 
@@ -83,10 +83,12 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
     
     if (!querySnapshot.empty) {
       const doc = querySnapshot.docs[0];
-      return {
-        id: doc.id,
-        ...doc.data(),
-      } as UserProfile;
+      if (doc) {
+        return {
+          id: doc.id,
+          ...doc.data(),
+        } as UserProfile;
+      }
     }
     return null;
   } catch (error: any) {
@@ -182,16 +184,16 @@ export const getUserTeams = async (uid: string): Promise<Team[]> => {
 // Permission Management
 export const getDefaultPermissions = (role: UserProfile['role']): string[] => {
   switch (role) {
-    case 'admin':
-      return ['read', 'write', 'delete', 'manage_users', 'manage_teams', 'manage_events'];
-    case 'manager':
-      return ['read', 'write', 'manage_events', 'manage_coaches'];
-    case 'coach':
-      return ['read', 'write', 'manage_own_events'];
-    case 'member':
-      return ['read', 'write_own'];
-    default:
-      return ['read'];
+  case 'admin':
+    return ['read', 'write', 'delete', 'manage_users', 'manage_teams', 'manage_events'];
+  case 'manager':
+    return ['read', 'write', 'manage_events', 'manage_coaches'];
+  case 'coach':
+    return ['read', 'write', 'manage_own_events'];
+  case 'member':
+    return ['read', 'write_own'];
+  default:
+    return ['read'];
   }
 };
 

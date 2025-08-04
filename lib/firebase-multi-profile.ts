@@ -1,5 +1,6 @@
-import { collection, addDoc, updateDoc, doc, getDocs, query, orderBy, getDoc, deleteDoc, where, setDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
+import { collection, addDoc, updateDoc, doc, getDocs, query, orderBy, getDoc, deleteDoc, where, setDoc } from 'firebase/firestore';
+
 import { db } from './firebase';
 import { EventData } from './types';
 import { EventFormData } from './validation';

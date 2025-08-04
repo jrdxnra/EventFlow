@@ -9,8 +9,8 @@ import { useState, useEffect } from 'react';
 import { auth } from '@/lib/firebase';
 import { createEvent } from '@/lib/firebase-events';
 import { createEventByProfile } from '@/lib/firebase-multi-profile';
-import { validateFormData, EventFormData } from '@/lib/validation';
 import { EventData } from '@/lib/types';
+import { validateFormData, EventFormData } from '@/lib/validation';
 
 
 // Quick-fill templates for different event types
@@ -315,8 +315,7 @@ export default function EventSetup() {
 
       // Save to Firebase based on event scope
       const profileType = formData.eventScope;
-      const teamId = 'default-team'; // TODO: Get actual team ID from user profile
-      const eventId = await createEventByProfile(formData, profileType, user?.uid || '', teamId);
+      const eventId = await createEventByProfile(formData, profileType, user?.uid || '');
       
       // Also store in localStorage for static site logistics
       if (eventId) {

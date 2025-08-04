@@ -4,26 +4,9 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Users, Settings, Trash2, Edit3, Save } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+
+import { Coach, Contact } from '@/lib/types';
 import { getCoaches, createCoach, updateCoach, deleteCoach, getContacts, createContact, deleteContact } from '@/lib/firebase-coaches';
-
-interface Coach {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  specialties: string[];
-  availability: string;
-}
-
-interface Contact {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: string;
-  category: 'venue' | 'emergency' | 'vendor' | 'other';
-  notes?: string;
-}
 
 export default function ConfigPage() {
   const [activeTab, setActiveTab] = useState<'coaches' | 'contacts' | 'settings'>('coaches');
@@ -37,7 +20,8 @@ export default function ConfigPage() {
     email: '',
     phone: '',
     specialties: [''],
-    availability: '',
+    availability: [''],
+    bio: '',
   });
   const [editingCoach, setEditingCoach] = useState<Coach | null>(null);
 
@@ -79,6 +63,8 @@ export default function ConfigPage() {
       const coachData = {
         ...newCoach,
         specialties: newCoach.specialties.filter(s => s.trim() !== ''),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
       
       const coachId = await createCoach(coachData);
@@ -90,7 +76,8 @@ export default function ConfigPage() {
         email: '',
         phone: '',
         specialties: [''],
-        availability: '',
+        availability: [''],
+        bio: '',
       });
       setShowAddCoach(false);
     } catch (error) {
@@ -125,8 +112,13 @@ export default function ConfigPage() {
     if (!newContact.name || !newContact.role) return;
     
     try {
-      const contactId = await createContact(newContact);
-      const newContactWithId = { id: contactId, ...newContact };
+      const contactData = {
+        ...newContact,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const contactId = await createContact(contactData);
+      const newContactWithId = { id: contactId, ...contactData };
       
       setContacts([...contacts, newContactWithId]);
       setNewContact({
@@ -168,7 +160,7 @@ export default function ConfigPage() {
         
         const [coachesData, contactsData] = await Promise.all([
           getCoaches(),
-          getContacts()
+          getContacts(),
         ]);
         
         setCoaches(coachesData);
@@ -205,17 +197,17 @@ export default function ConfigPage() {
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {/* Header */}
-                    <div className="mb-8">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <Link href="/" className="text-gray-600 hover:text-gray-800">
-                    <ArrowLeft className="h-6 w-6" />
-                  </Link>
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Team Configuration</h1>
-                    <p className="text-gray-600">Manage shared coaches, contacts, and team settings</p>
-                  </div>
-                </div>
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Link href="/" className="text-gray-600 hover:text-gray-800">
+                <ArrowLeft className="h-6 w-6" />
+              </Link>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Team Configuration</h1>
+                <p className="text-gray-600">Manage shared coaches, contacts, and team settings</p>
+              </div>
+            </div>
             <button
               onClick={saveSettings}
               className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
@@ -316,8 +308,8 @@ export default function ConfigPage() {
                           <label className="block text-sm font-medium text-gray-700 mb-1">Availability</label>
                           <input
                             type="text"
-                            value={newCoach.availability}
-                            onChange={(e) => setNewCoach({...newCoach, availability: e.target.value})}
+                            value={newCoach.availability[0] || ''}
+                            onChange={(e) => setNewCoach({...newCoach, availability: [e.target.value]})}
                             placeholder="Weekends, Weekdays, Flexible"
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                           />
@@ -562,7 +554,7 @@ export default function ConfigPage() {
                             value={settings.defaultVenueContact.name}
                             onChange={(e) => setSettings({
                               ...settings,
-                              defaultVenueContact: { ...settings.defaultVenueContact, name: e.target.value }
+                              defaultVenueContact: { ...settings.defaultVenueContact, name: e.target.value },
                             })}
                             placeholder="Venue Manager"
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -572,7 +564,7 @@ export default function ConfigPage() {
                             value={settings.defaultVenueContact.email}
                             onChange={(e) => setSettings({
                               ...settings,
-                              defaultVenueContact: { ...settings.defaultVenueContact, email: e.target.value }
+                              defaultVenueContact: { ...settings.defaultVenueContact, email: e.target.value },
                             })}
                             placeholder="venue@example.com"
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -582,7 +574,7 @@ export default function ConfigPage() {
                             value={settings.defaultVenueContact.phone}
                             onChange={(e) => setSettings({
                               ...settings,
-                              defaultVenueContact: { ...settings.defaultVenueContact, phone: e.target.value }
+                              defaultVenueContact: { ...settings.defaultVenueContact, phone: e.target.value },
                             })}
                             placeholder="(555) 123-4567"
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -597,7 +589,7 @@ export default function ConfigPage() {
                             value={settings.defaultEmergencyContact.name}
                             onChange={(e) => setSettings({
                               ...settings,
-                              defaultEmergencyContact: { ...settings.defaultEmergencyContact, name: e.target.value }
+                              defaultEmergencyContact: { ...settings.defaultEmergencyContact, name: e.target.value },
                             })}
                             placeholder="Emergency Services"
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -607,7 +599,7 @@ export default function ConfigPage() {
                             value={settings.defaultEmergencyContact.email}
                             onChange={(e) => setSettings({
                               ...settings,
-                              defaultEmergencyContact: { ...settings.defaultEmergencyContact, email: e.target.value }
+                              defaultEmergencyContact: { ...settings.defaultEmergencyContact, email: e.target.value },
                             })}
                             placeholder="emergency@example.com"
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -617,7 +609,7 @@ export default function ConfigPage() {
                             value={settings.defaultEmergencyContact.phone}
                             onChange={(e) => setSettings({
                               ...settings,
-                              defaultEmergencyContact: { ...settings.defaultEmergencyContact, phone: e.target.value }
+                              defaultEmergencyContact: { ...settings.defaultEmergencyContact, phone: e.target.value },
                             })}
                             placeholder="911"
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"

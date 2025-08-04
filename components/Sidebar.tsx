@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { motion } from 'framer-motion';
 import { 
   Calendar, 
@@ -9,6 +8,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
+import React from 'react';
 import { Sidebar, Menu as ProMenu, MenuItem } from 'react-pro-sidebar';
 
 import { EventData } from '@/lib/types';
@@ -163,11 +163,11 @@ const EventSidebar = React.memo(function EventSidebar({
             <div className="flex items-center justify-between">
               <p className="text-xs text-gray-500 truncate">{event.location}</p>
               <div className="flex items-center space-x-1">
-                        <Link
-          href={`/logistics?eventId=${event.id}`}
-          className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-          title="View logistics"
-        >
+                <Link
+                  href={`/logistics?eventId=${event.id}`}
+                  className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                  title="View logistics"
+                >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>

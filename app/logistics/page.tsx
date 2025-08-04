@@ -3,12 +3,11 @@
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Users, Calendar, Clock, User, Phone, Mail, MapPin, Trash2, Edit3 } from 'lucide-react';
 import Link from 'next/link';
-
 import { useState, useEffect } from 'react';
 
-import { EventData } from '@/lib/types';
-import { getEventById } from '@/lib/firebase-events';
 import { getEventLogistics, saveEventLogistics } from '@/lib/firebase-coaches';
+import { getEventById } from '@/lib/firebase-events';
+import { EventData } from '@/lib/types';
 
 
 
@@ -238,6 +237,7 @@ export default function EventLogistics() {
       time: '09:00',
       eventEndTime: '10:30',
       location: 'Central Park - Fitness Area',
+      eventScope: 'team',
       pointOfContact: {
         name: 'Sarah Johnson',
         email: 'sarah@fitnessstudio.com',
@@ -252,6 +252,7 @@ export default function EventLogistics() {
       otherNotes: 'Bring water, comfortable workout clothes, and positive energy!',
       eventType: 'popup-class',
       status: 'active',
+      createdBy: 'sample-user',
       createdAt: new Date(),
       updatedAt: new Date(),
     };

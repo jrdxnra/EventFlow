@@ -61,4 +61,29 @@ export interface TeamMember {
   email: string
   role: string
   assignedTasks: string[]
+}
+
+export interface Coach {
+  id: string
+  name: string
+  email: string
+  phone: string
+  specialties: string[]
+  availability: string[]
+  bio: string
+  profileImage?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface Contact {
+  id: string
+  name: string
+  email: string
+  phone: string
+  role: string
+  category: 'team' | 'venue' | 'emergency' | 'vendor' | 'other'
+  notes?: string
+  createdAt: Date
+  updatedAt: Date
 } 

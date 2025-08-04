@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, LogOut, Settings, Users, UserCheck, AlertCircle, RefreshCw } from 'lucide-react';
-import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { useState, useEffect } from 'react';
+
 import { auth } from '@/lib/firebase';
 import { initializeUserSession, getUserProfile, UserProfile as UserProfileType } from '@/lib/firebase-users';
+
 import UserPreferences from './UserPreferences';
 
 interface UserProfileProps {
@@ -37,7 +39,7 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
         } catch (error) {
           console.error('Error initializing user session:', error);
           // Don't show error for permission issues during initial setup
-          if (error.message.includes('permissions')) {
+          if (error instanceof Error && error.message.includes('permissions')) {
             console.log('Permission error during initial setup - this is expected for new users');
           } else {
             setAuthError('Failed to load user profile');

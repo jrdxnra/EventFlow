@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, User, Bell, Calendar, Monitor } from 'lucide-react';
-import { saveUserPreferences, getUserProfile } from '@/lib/firebase-users';
+import { useState, useEffect } from 'react';
+
 import { auth } from '@/lib/firebase';
+import { saveUserPreferences, getUserProfile } from '@/lib/firebase-users';
 
 interface UserPreferencesProps {
   isOpen: boolean;
