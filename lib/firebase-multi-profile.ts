@@ -1,6 +1,6 @@
 import { collection, addDoc, updateDoc, doc, getDocs, query, orderBy, deleteDoc, where } from 'firebase/firestore';
 
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { EventData } from './types';
 import { EventFormData } from './validation';
 
@@ -17,7 +17,7 @@ export interface MultiProfileEventData extends EventData {
 // Team Events Management - Single team approach
 export const getTeamEvents = async (): Promise<MultiProfileEventData[]> => {
   try {
-    console.log('Fetching team events from main events collection');
+    console.log('🔥 FIREBASE READ: getTeamEvents() called from:', new Error().stack?.split('\n')[2]?.trim());
     
     // Get all events from the main events collection (shared team events)
     const q = query(
@@ -64,7 +64,7 @@ export const createTeamEvent = async (
         phone: formData.pointOfContact.phone || '',
       },
       eventPurpose: formData.eventPurpose,
-      coachSupport: formData.coachSupport,
+      teamRoles: formData.teamRoles,
       marketingChannels: formData.marketingChannels,
       ticketingNeeds: formData.ticketingNeeds || '',
       gemsDetails: formData.gemsDetails || '',
@@ -95,7 +95,7 @@ export const getIndividualEvents = async (userId: string): Promise<MultiProfileE
       return [];
     }
 
-    console.log('Fetching individual events for user:', userId);
+    console.log('🔥 FIREBASE READ: getIndividualEvents() called for user:', userId, 'from:', new Error().stack?.split('\n')[2]?.trim());
     
     const q = query(
       collection(db, INDIVIDUAL_EVENTS_COLLECTION),
@@ -139,7 +139,7 @@ export const createIndividualEvent = async (
         phone: formData.pointOfContact.phone || '',
       },
       eventPurpose: formData.eventPurpose,
-      coachSupport: formData.coachSupport,
+      teamRoles: formData.teamRoles,
       marketingChannels: formData.marketingChannels,
       ticketingNeeds: formData.ticketingNeeds || '',
       gemsDetails: formData.gemsDetails || '',
@@ -225,11 +225,60 @@ export const deleteEvent = async (
   profileType: 'team' | 'individual'
 ): Promise<void> => {
   try {
+    console.log('🗑️ FIREBASE DELETE: Attempting to delete event:', eventId, 'with profileType:', profileType);
+    
+    if (!eventId) {
+      throw new Error('Event ID is required for deletion');
+    }
+
+    // Check if user is authenticated
+    const currentUser = auth.currentUser;
+    console.log('🔐 FIREBASE DELETE: Current user:', currentUser?.uid || 'No user');
+    
+    if (!currentUser) {
+      throw new Error('User must be authenticated to delete events');
+    }
+
+    // Get fresh token to ensure permissions are current
+    try {
+      const token = await currentUser.getIdToken(true);
+      console.log('🔄 FIREBASE DELETE: Fresh token obtained, length:', token.length);
+    } catch (tokenError) {
+      console.error('🚨 FIREBASE DELETE: Token refresh failed:', tokenError);
+      throw new Error('Authentication token refresh failed');
+    }
+    
     const collectionName = profileType === 'team' ? TEAM_EVENTS_COLLECTION : INDIVIDUAL_EVENTS_COLLECTION;
+    console.log('🗑️ FIREBASE DELETE: Using collection:', collectionName);
+    
     const eventRef = doc(db, collectionName, eventId);
     await deleteDoc(eventRef);
-  } catch (error) {
-    console.error('Error deleting event:', error);
-    throw new Error('Failed to delete event');
+    
+    console.log('🗑️ FIREBASE DELETE: Successfully deleted event:', eventId);
+  } catch (error: any) {
+    console.error('🚨 Error deleting event:', error);
+    console.error('🚨 Error details:', {
+      eventId,
+      profileType,
+      code: error?.code || 'no-code',
+      message: error?.message || 'no-message',
+      errorType: typeof error,
+      errorString: String(error),
+      errorKeys: Object.keys(error || {})
+    });
+    
+    // Handle different error object structures
+    const errorCode = error?.code || error?.name || '';
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    
+    if (errorCode === 'permission-denied' || errorMessage.includes('permission')) {
+      throw new Error('Permission denied: You do not have permission to delete this event');
+    } else if (errorCode === 'not-found' || errorMessage.includes('not found')) {
+      throw new Error('Event not found: The event may have already been deleted');
+    } else if (errorCode === 'unauthenticated' || errorMessage.includes('unauthenticated')) {
+      throw new Error('Authentication required: Please sign in to delete events');
+    } else {
+      throw new Error(`Failed to delete event: ${errorMessage}`);
+    }
   }
 }; 

@@ -61,4 +61,20 @@
   .quick-fill-card.selected {
     @apply border-primary-500 bg-primary-50;
   }
+  
+  /* Timeline transition styles */
+  .timeline-transition {
+    transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+  }
+  
+  .timeline-collapsed {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+  }
+  
+  .timeline-expanded {
+    max-height: 500px;
+    opacity: 1;
+  }
 } 

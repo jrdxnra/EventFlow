@@ -1,5 +1,19 @@
 {
   "projects": {
-    "default": "eventflow-exos"
-  }
+    "default": "eventflow-exos-staging",
+    "staging": "eventflow-exos"
+  },
+  "targets": {
+    "eventflow-exos": {
+      "hosting": {
+        "production": [
+          "eventflow-exos"
+        ],
+        "staging": [
+          "eventflow-stagingexos"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

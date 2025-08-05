@@ -2,8 +2,9 @@
 
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, LogOut, Settings, Users, UserCheck, AlertCircle, RefreshCw } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { User, LogOut, Settings, Users, UserCheck, RefreshCw, Wrench } from 'lucide-react';
+import Link from 'next/link';
+import { useState, useEffect, useRef } from 'react';
 
 import { auth } from '@/lib/firebase';
 import { initializeUserSession, UserProfile as UserProfileType } from '@/lib/firebase-users';
@@ -25,6 +26,14 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
   const [isTeamMode, setIsTeamMode] = useState(true); // Default to team mode
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [showUserPreferences, setShowUserPreferences] = useState(false);
+  
+  // Cache for user profile data
+  const profileCacheRef = useRef<{
+    [uid: string]: { profile: UserProfileType; timestamp: number };
+  }>({});
+  
+  // Ref for dropdown to handle outside clicks
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -32,10 +41,30 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
       
       if (user) {
         try {
-          // Initialize user session and get profile
-          const profile = await initializeUserSession(user);
-          setUserProfile(profile);
-          onUserProfileChange?.(profile);
+          // Check cache first
+          const cacheKey = user.uid;
+          const now = Date.now();
+          const cacheTimeout = process.env.NODE_ENV === 'development' ? 300000 : 600000; // 5 min dev, 10 min prod
+          
+          if (profileCacheRef.current[cacheKey] && 
+              (now - profileCacheRef.current[cacheKey].timestamp) < cacheTimeout) {
+            console.log('Using cached user profile');
+            const cachedProfile = profileCacheRef.current[cacheKey].profile;
+            setUserProfile(cachedProfile);
+            onUserProfileChange?.(cachedProfile);
+          } else {
+            // Initialize user session and get profile
+            const profile = await initializeUserSession(user);
+            
+            // Cache the profile
+            profileCacheRef.current[cacheKey] = {
+              profile,
+              timestamp: now,
+            };
+            
+            setUserProfile(profile);
+            onUserProfileChange?.(profile);
+          }
         } catch (error) {
           console.error('Error initializing user session:', error);
           // Don't show error for permission issues during initial setup
@@ -57,6 +86,72 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
 
     return () => unsubscribe();
   }, [onUserChange]);
+
+  // Handle outside clicks to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
+  // Auto-refresh auth if user is logged in but missing photoURL
+  useEffect(() => {
+    if (user && !user.photoURL && !isLoading) {
+      console.log('User missing photoURL, auto-refreshing auth...');
+      refreshAuth();
+    }
+  }, [user, isLoading]);
+
+  // Auto-retry authentication on errors
+  useEffect(() => {
+    if (authError && !isLoading && !isSigningIn) {
+      console.log('Auth error detected, auto-retrying...');
+      const retryTimer = setTimeout(() => {
+        setAuthError(null);
+        if (!user) {
+          signInWithGoogle();
+        } else {
+          refreshAuth();
+        }
+      }, 2000); // Wait 2 seconds before retrying
+
+      return () => clearTimeout(retryTimer);
+    }
+    return undefined;
+  }, [authError, isLoading, isSigningIn, user]);
+
+  // Monitor auth token and auto-refresh when needed
+  useEffect(() => {
+    if (!user) return;
+
+    const checkTokenExpiry = async () => {
+      try {
+        const token = await user.getIdToken(true); // Force refresh
+        if (!token) {
+          console.log('Token expired, auto-refreshing...');
+          refreshAuth();
+        }
+      } catch (error) {
+        console.log('Token refresh failed, auto-retrying auth...');
+        refreshAuth();
+      }
+    };
+
+    // Check token every 5 minutes
+    const tokenCheckInterval = setInterval(checkTokenExpiry, 5 * 60 * 1000);
+    
+    return () => clearInterval(tokenCheckInterval);
+  }, [user]);
 
   const signInWithGoogle = async () => {
     setIsSigningIn(true);
@@ -90,11 +185,16 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
     setIsDropdownOpen(false);
   };
 
-  const refreshAuth = async () => {
+  const refreshAuth = async (): Promise<void> => {
     setIsLoading(true);
     setAuthError(null);
     
     try {
+      // Clear the profile cache to force a fresh fetch
+      if (user?.uid) {
+        delete profileCacheRef.current[user.uid];
+      }
+      
       // Force a refresh of the auth state
       await auth.currentUser?.reload();
     } catch (error: any) {
@@ -104,6 +204,14 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
       setIsLoading(false);
     }
   };
+
+  // Function to invalidate profile cache (commented out for now)
+  // const invalidateProfileCache = () => {
+  //   if (user?.uid) {
+  //     delete profileCacheRef.current[user.uid];
+  //     console.log('Profile cache invalidated');
+  //   }
+  // };
 
   if (isLoading) {
     return (
@@ -133,19 +241,10 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
         </button>
         
         {authError && (
-          <div className="absolute top-full right-0 mt-2 w-64 bg-red-50 border border-red-200 rounded-lg p-3 shadow-lg z-50">
-            <div className="flex items-start space-x-2">
-              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm text-red-800 font-medium">Authentication Error</p>
-                <p className="text-xs text-red-600 mt-1">{authError}</p>
-                <button
-                  onClick={signInWithGoogle}
-                  className="text-xs text-red-600 hover:text-red-800 underline mt-2"
-                >
-                  Try again
-                </button>
-              </div>
+          <div className="absolute top-full right-0 mt-2 w-48 bg-yellow-50 border border-yellow-200 rounded-lg p-2 shadow-lg z-50">
+            <div className="flex items-center space-x-2">
+              <RefreshCw className="h-3 w-3 text-yellow-600 animate-spin" />
+              <span className="text-xs text-yellow-700">Auto-retrying...</span>
             </div>
           </div>
         )}
@@ -159,7 +258,7 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
   const isTeamMember = userProfile?.teamId ? 'Team Member' : 'Individual';
 
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
         className="flex items-center space-x-2 p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
@@ -171,10 +270,14 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
               src={user.photoURL} 
               alt={user.displayName || 'User'} 
               className="w-8 h-8 rounded-full"
+              onError={(e) => {
+                console.log('Image failed to load, falling back to icon');
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              }}
             />
-          ) : (
-            <User className="h-4 w-4 text-primary-600" />
-          )}
+          ) : null}
+          <User className={`h-4 w-4 text-primary-600 ${user.photoURL ? 'hidden' : ''}`} />
         </div>
         <span className="text-sm font-medium text-gray-700 hidden sm:block">
           {user.displayName || user.email}
@@ -244,6 +347,15 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
             </div>
 
             <div className="border-t border-gray-100 p-2">
+              <Link
+                href="/config"
+                onClick={() => setIsDropdownOpen(false)}
+                className="w-full flex items-center space-x-3 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+              >
+                <Wrench className="h-4 w-4" />
+                <span>Team Configuration</span>
+              </Link>
+              
               <button
                 onClick={() => {
                   setShowUserPreferences(true);
@@ -256,14 +368,6 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
               </button>
               
               <button
-                onClick={refreshAuth}
-                className="w-full flex items-center space-x-3 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
-              >
-                <RefreshCw className="h-4 w-4" />
-                <span>Refresh Authentication</span>
-              </button>
-              
-              <button
                 onClick={handleSignOut}
                 className="w-full flex items-center space-x-3 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
               >
@@ -272,17 +376,7 @@ export default function UserProfile({ onUserChange, onTeamModeChange, onUserProf
               </button>
             </div>
 
-            {authError && (
-              <div className="border-t border-gray-100 p-3 bg-red-50">
-                <div className="flex items-start space-x-2">
-                  <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-xs text-red-800 font-medium">Authentication Error</p>
-                    <p className="text-xs text-red-600 mt-1">{authError}</p>
-                  </div>
-                </div>
-              </div>
-            )}
+
           </motion.div>
         )}
       </AnimatePresence>

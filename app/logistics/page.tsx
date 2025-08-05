@@ -1,13 +1,15 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Users, Calendar, Clock, User, Phone, Mail, MapPin, Trash2, Edit3 } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Calendar, Clock, User, Phone, Mail, MapPin, Trash2, Edit3, Save, Check, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 
-import { getEventLogistics, saveEventLogistics } from '@/lib/firebase-coaches';
+import { getEventLogistics, saveEventLogistics, getCoaches } from '@/lib/firebase-coaches';
 import { getEventById } from '@/lib/firebase-events';
-import { EventData } from '@/lib/types';
+import { EventData, Coach } from '@/lib/types';
+import { TASK_CATEGORIES, TASK_PRIORITIES, TASK_STATUSES, TEAM_ROLES, CONTACT_CATEGORIES, ARRIVAL_TIME_OPTIONS } from '@/lib/event-constants';
+import ModalButton from '@/components/ModalButton';
 
 
 
@@ -17,7 +19,8 @@ interface TeamMember {
   email: string
   phone: string
   role: string
-  arrivalTime: string
+  arrivalTime: number | 'custom' // Minutes relative to event start, or 'custom' for custom input
+  customArrivalTime?: string // For custom time input
   responsibilities: string[]
 }
 
@@ -66,7 +69,8 @@ export default function EventLogistics() {
     email: '',
     phone: '',
     role: '',
-    arrivalTime: '',
+    arrivalTime: -60 as number | 'custom', // Default to 1 hour before
+    customArrivalTime: '',
     responsibilities: [''],
   });
   const [showEditTeamMember, setShowEditTeamMember] = useState(false);
@@ -84,6 +88,8 @@ export default function EventLogistics() {
     location: '',
     materials: [''],
   });
+  const [showEditActivity, setShowEditActivity] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<EventActivity | null>(null);
 
   // Day-of Schedule
   const [dayOfSchedule, setDayOfSchedule] = useState<DayOfSchedule[]>([]);
@@ -95,6 +101,8 @@ export default function EventLogistics() {
     responsible: '',
     notes: '',
   });
+  const [showEditScheduleItem, setShowEditScheduleItem] = useState(false);
+  const [editingScheduleItem, setEditingScheduleItem] = useState<DayOfSchedule | null>(null);
 
   // Contact Management
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -123,19 +131,83 @@ export default function EventLogistics() {
   });
   const [showEditVenue, setShowEditVenue] = useState(false);
   const [showEditEmergency, setShowEditEmergency] = useState(false);
+  const [coaches, setCoaches] = useState<Coach[]>([]);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
 
-  const roleOptions = [
-    'Event Lead',
-    'Setup Coordinator',
-    'Registration Lead',
-    'Activity Lead',
-    'Cleanup Coordinator',
-    'Safety Monitor',
-    'Photographer',
-    'Equipment Manager',
-    'Catering Coordinator',
-    'Transportation Lead',
-  ];
+  const roleOptions = TEAM_ROLES;
+
+  // Get default arrival time based on team role
+  const getDefaultArrivalTime = (role: string): number | 'custom' => {
+    switch (role) {
+      case 'Event Lead':
+        return -120; // 2 hours before
+      case 'Setup Coordinator':
+        return -120; // 2 hours before
+      case 'Registration Lead':
+        return -60; // 1 hour before
+      case 'Activities Coordinator':
+        return -30; // 30 minutes before
+      case 'Safety Monitor':
+        return -30; // 30 minutes before
+      case 'Cleanup Coordinator':
+        return 0; // At event start
+      case 'Tech Support':
+        return -60; // 1 hour before
+      case 'Photography/Media':
+        return -30; // 30 minutes before
+      case 'Guest Relations':
+        return -60; // 1 hour before
+      case 'Equipment Manager':
+        return -120; // 2 hours before
+      default:
+        return -60; // Default to 1 hour before
+    }
+  };
+
+  // Convert arrival time number to readable label
+  const getArrivalTimeLabel = (arrivalTime: number | 'custom' | string): string => {
+    console.log('getArrivalTimeLabel called with:', arrivalTime, 'type:', typeof arrivalTime);
+    
+    if (arrivalTime === 'custom') return 'Custom time';
+    
+    // Handle string format (old data)
+    if (typeof arrivalTime === 'string') {
+      return arrivalTime; // Return the string as-is since it's already readable
+    }
+    
+    // Handle numeric format (new data)
+    switch (arrivalTime) {
+      case -180: return '3 hours before';
+      case -120: return '2 hours before';
+      case -60: return '1 hour before';
+      case -30: return '30 minutes before';
+      case 0: return 'At event start';
+      default: 
+        console.log('No match found for arrival time:', arrivalTime);
+        return 'Custom time';
+    }
+  };
+
+  // Convert arrival time to dropdown value (for edit modal)
+  const getArrivalTimeDropdownValue = (arrivalTime: number | 'custom' | string): string => {
+    if (arrivalTime === 'custom') return 'custom';
+    
+    // Handle string format (old data) - convert back to numeric
+    if (typeof arrivalTime === 'string') {
+      switch (arrivalTime) {
+        case '3 hours before': return '-180';
+        case '2 hours before': return '-120';
+        case '1 hour before': return '-60';
+        case '30 minutes before': return '-30';
+        case 'At event start': return '0';
+        default: return 'custom';
+      }
+    }
+    
+    // Handle numeric format (new data)
+    return arrivalTime.toString();
+  };
 
 
 
@@ -150,11 +222,50 @@ export default function EventLogistics() {
         let eventData: EventData = loadSampleEvent(); // Default fallback
         
         if (id) {
-          // Try to load event from Firebase first
+          // Check cache first to prevent unnecessary Firebase reads
+          const cacheKey = `eventflow-event-${id}`;
+          const logisticsCacheKey = `eventflow-logistics-${id}`;
+          const lastFetchKey = `eventflow-event-fetch-${id}`;
+          
+          const now = Date.now();
+          const lastFetch = localStorage.getItem(lastFetchKey);
+          const cacheAge = lastFetch ? now - parseInt(lastFetch) : Infinity;
+          const cacheTimeout = process.env.NODE_ENV === 'development' ? 300000 : 600000; // 5 min dev, 10 min prod
+          
+          // Try cached event data first
+          const cachedEvent = localStorage.getItem(cacheKey);
+          if (cachedEvent && cacheAge < cacheTimeout) {
+            console.log('Using cached event data for logistics page');
+            eventData = JSON.parse(cachedEvent);
+            setEvent(eventData);
+            
+            // Also try cached logistics data
+            const cachedLogistics = localStorage.getItem(logisticsCacheKey);
+            if (cachedLogistics) {
+              console.log('Using cached logistics data');
+              const logisticsData = JSON.parse(cachedLogistics);
+              setTeamMembers(logisticsData.teamMembers || []);
+              setActivities(logisticsData.activities || []);
+              setDayOfSchedule(logisticsData.dayOfSchedule || []);
+              setContacts(logisticsData.contacts || []);
+            } else {
+              // Generate defaults if no cached logistics
+              generateDefaultTeam(eventData);
+              generateDefaultActivities(eventData);
+              generateDefaultSchedule(eventData);
+            }
+            return;
+          }
+          
+          // Cache miss - fetch from Firebase
+          console.log('Cache miss - fetching event and logistics from Firebase');
           try {
             const firebaseEvent = await getEventById(id);
             if (firebaseEvent) {
               eventData = firebaseEvent;
+              // Cache the event data
+              localStorage.setItem(cacheKey, JSON.stringify(firebaseEvent));
+              localStorage.setItem(lastFetchKey, now.toString());
             }
           } catch (error) {
             console.error('Error loading event from Firebase:', error);
@@ -172,27 +283,48 @@ export default function EventLogistics() {
         
         setEvent(eventData);
         
-        // Try to load existing logistics data from Firebase
+        // Try to load existing logistics data from Firebase (with caching)
         if (id) {
-          try {
-            const logisticsData = await getEventLogistics(id);
-            if (logisticsData) {
-              setTeamMembers(logisticsData.teamMembers || []);
-              setActivities(logisticsData.activities || []);
-              setDayOfSchedule(logisticsData.dayOfSchedule || []);
-              setContacts(logisticsData.contacts || []);
-            } else {
-              // Generate default data if no logistics exist
+          const logisticsCacheKey = `eventflow-logistics-${id}`;
+          const cachedLogistics = localStorage.getItem(logisticsCacheKey);
+          const lastFetchKey = `eventflow-event-fetch-${id}`;
+          const lastFetch = localStorage.getItem(lastFetchKey);
+          const now = Date.now();
+          const cacheAge = lastFetch ? now - parseInt(lastFetch) : Infinity;
+          const cacheTimeout = process.env.NODE_ENV === 'development' ? 300000 : 600000; // 5 min dev, 10 min prod
+          
+          if (cachedLogistics && cacheAge < cacheTimeout) {
+            console.log('Using cached logistics data (2nd check)');
+            const logisticsData = JSON.parse(cachedLogistics);
+            setTeamMembers(logisticsData.teamMembers || []);
+            setActivities(logisticsData.activities || []);
+            setDayOfSchedule(logisticsData.dayOfSchedule || []);
+            setContacts(logisticsData.contacts || []);
+          } else {
+            try {
+              const logisticsData = await getEventLogistics(id);
+              if (logisticsData) {
+                // Cache the logistics data
+                localStorage.setItem(logisticsCacheKey, JSON.stringify(logisticsData));
+                localStorage.setItem(lastFetchKey, now.toString());
+                
+                setTeamMembers(logisticsData.teamMembers || []);
+                setActivities(logisticsData.activities || []);
+                setDayOfSchedule(logisticsData.dayOfSchedule || []);
+                setContacts(logisticsData.contacts || []);
+              } else {
+                // Generate default data if no logistics exist
+                generateDefaultTeam(eventData);
+                generateDefaultActivities(eventData);
+                generateDefaultSchedule(eventData);
+              }
+            } catch (error) {
+              console.error('Error loading logistics data:', error);
+              // Generate default data if loading fails
               generateDefaultTeam(eventData);
               generateDefaultActivities(eventData);
               generateDefaultSchedule(eventData);
             }
-          } catch (error) {
-            console.error('Error loading logistics data:', error);
-            // Generate default data if loading fails
-            generateDefaultTeam(eventData);
-            generateDefaultActivities(eventData);
-            generateDefaultSchedule(eventData);
           }
         } else {
           // Generate default team members based on event data
@@ -212,10 +344,25 @@ export default function EventLogistics() {
     loadEvent();
   }, []);
 
+  // Load coaches for dropdowns
+  useEffect(() => {
+    const loadCoaches = async () => {
+      try {
+        const coachesData = await getCoaches();
+        setCoaches(coachesData);
+      } catch (error) {
+        console.error('Error loading coaches:', error);
+      }
+    };
+
+    loadCoaches();
+  }, []);
+
   const saveLogisticsToFirebase = async () => {
     if (!eventId) return;
     
     try {
+      setSaveStatus('saving');
       const logisticsData = {
         teamMembers,
         activities,
@@ -224,8 +371,16 @@ export default function EventLogistics() {
       };
       
       await saveEventLogistics(eventId, logisticsData);
+      setSaveStatus('saved');
+      
+      // Reset to idle after 2 seconds
+      setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
       console.error('Error saving logistics to Firebase:', error);
+      setSaveStatus('error');
+      
+      // Reset to idle after 3 seconds
+      setTimeout(() => setSaveStatus('idle'), 3000);
     }
   };
 
@@ -244,7 +399,7 @@ export default function EventLogistics() {
         phone: '(555) 123-4567',
       },
       eventPurpose: 'Outdoor fitness class to promote healthy lifestyle',
-      coachSupport: 'solo',
+      teamRoles: ['Event Lead'],
       marketingChannels: ['Social Media', 'Email'],
       ticketingNeeds: 'Free event, registration required',
       gemsDetails: 'N/A',
@@ -266,7 +421,7 @@ export default function EventLogistics() {
         email: eventData.pointOfContact.email,
         phone: eventData.pointOfContact.phone,
         role: 'Event Lead',
-        arrivalTime: '2 hours before',
+        arrivalTime: -120, // 2 hours before
         responsibilities: ['Overall event coordination', 'Emergency contact'],
       },
       {
@@ -275,7 +430,7 @@ export default function EventLogistics() {
         email: '',
         phone: '',
         role: 'Setup Coordinator',
-        arrivalTime: '2 hours before',
+        arrivalTime: -120, // 2 hours before
         responsibilities: ['Set up venue and equipment', 'Manage setup team', 'Coordinate with venue'],
       },
       {
@@ -284,7 +439,7 @@ export default function EventLogistics() {
         email: '',
         phone: '',
         role: 'Activity Lead',
-        arrivalTime: '1 hour before',
+        arrivalTime: -60, // 1 hour before
         responsibilities: ['Lead event activities', 'Manage participant engagement', 'Coordinate with coaches'],
       },
       {
@@ -293,7 +448,7 @@ export default function EventLogistics() {
         email: '',
         phone: '',
         role: 'Clean Up Coordinator',
-        arrivalTime: 'During event',
+        arrivalTime: 0, // At event start
         responsibilities: ['Coordinate cleanup', 'Manage breakdown', 'Ensure venue is left clean'],
       },
     ];
@@ -379,7 +534,8 @@ export default function EventLogistics() {
         email: '',
         phone: '',
         role: '',
-        arrivalTime: '',
+        arrivalTime: -60 as number | 'custom',
+        customArrivalTime: '',
         responsibilities: [''],
       });
       setShowAddTeamMember(false);
@@ -451,8 +607,38 @@ export default function EventLogistics() {
     setActivities(activities.filter(activity => activity.id !== id));
   };
 
+  const editActivity = (activity: EventActivity) => {
+    setEditingActivity(activity);
+    setShowEditActivity(true);
+  };
+
+  const updateActivity = () => {
+    if (editingActivity) {
+      setActivities(prev => prev.map(activity => 
+        activity.id === editingActivity.id ? editingActivity : activity
+      ));
+      setShowEditActivity(false);
+      setEditingActivity(null);
+    }
+  };
+
   const removeScheduleItem = (id: string) => {
     setDayOfSchedule(dayOfSchedule.filter(item => item.id !== id));
+  };
+
+  const editScheduleItem = (item: DayOfSchedule) => {
+    setEditingScheduleItem(item);
+    setShowEditScheduleItem(true);
+  };
+
+  const updateScheduleItem = () => {
+    if (editingScheduleItem) {
+      setDayOfSchedule(prev => prev.map(item => 
+        item.id === editingScheduleItem.id ? editingScheduleItem : item
+      ));
+      setShowEditScheduleItem(false);
+      setEditingScheduleItem(null);
+    }
   };
 
   const addContact = () => {
@@ -476,6 +662,30 @@ export default function EventLogistics() {
 
   const removeContact = (id: string) => {
     setContacts(contacts.filter(contact => contact.id !== id));
+  };
+
+  // Check if logistics planning is complete
+  const isLogisticsComplete = () => {
+    if (!event) return false;
+    
+    // Check if team has at least the Event Lead assigned
+    const hasEventLead = teamMembers.some(member => 
+      member.role === 'Event Lead' && member.name !== 'Unassigned'
+    );
+    
+    // Check if we have at least some schedule items
+    const hasSchedule = dayOfSchedule.length > 0;
+    
+    // Check if we have at least some activities
+    const hasActivities = activities.length > 0;
+    
+    return hasEventLead && hasSchedule && hasActivities;
+  };
+
+  const handleCompleteLogistics = () => {
+    if (isLogisticsComplete()) {
+      setShowCompletionModal(true);
+    }
   };
 
   const printSchedule = () => {
@@ -647,13 +857,130 @@ export default function EventLogistics() {
               <h1 className="text-xl font-semibold text-gray-900">Day-of Logistics</h1>
               <p className="text-sm text-gray-500">{event.name}</p>
             </div>
-            <div className="w-20"></div>
+            {saveStatus === 'saving' ? (
+              <button
+                disabled
+                className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-600 border border-gray-200 rounded-lg font-medium cursor-not-allowed"
+              >
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-gray-600"></div>
+                <span className="hidden md:inline">Saving...</span>
+              </button>
+            ) : saveStatus === 'saved' ? (
+              <button className="flex items-center space-x-2 px-4 py-2 bg-green-100 text-green-800 border border-green-200 rounded-lg font-medium">
+                <Check className="h-4 w-4" />
+                <span className="hidden md:inline">Saved!</span>
+              </button>
+            ) : saveStatus === 'error' ? (
+              <button className="flex items-center space-x-2 px-4 py-2 bg-red-100 text-red-800 border border-red-200 rounded-lg font-medium">
+                <AlertCircle className="h-4 w-4" />
+                <span className="hidden md:inline">Error</span>
+              </button>
+            ) : (
+              <ModalButton
+                variant="save"
+                onClick={saveLogisticsToFirebase}
+                icon={<Save className="h-4 w-4" />}
+              >
+                Save
+              </ModalButton>
+            )}
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Completion Progress */}
+        <div className="bg-white rounded-lg shadow-sm border mb-8">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">Logistics Planning Progress</h3>
+                <p className="text-sm text-gray-600 mt-1">Complete all sections below to finish your logistics planning</p>
+              </div>
+              {isLogisticsComplete() && (
+                <ModalButton
+                  variant="logistics"
+                  onClick={handleCompleteLogistics}
+                  icon={<Check className="h-4 w-4" />}
+                >
+                  Review & Complete
+                </ModalButton>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {[
+                { id: 'team', label: 'Team Roles', icon: Users, complete: teamMembers.some(m => m.role === 'Event Lead' && m.name !== 'Unassigned'), description: 'Assign team members to roles' },
+                { id: 'activities', label: 'Event Activities', icon: Calendar, complete: activities.length > 0, description: 'Define event activities and leaders' },
+                { id: 'schedule', label: 'Day Schedule', icon: Clock, complete: dayOfSchedule.length > 0, description: 'Create day-of timeline' },
+                { id: 'contacts', label: 'Contact List', icon: User, complete: contacts.length > 0, description: 'Add key contacts' }
+              ].map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <div key={tab.id} className={`p-4 rounded-lg border-2 transition-all ${
+                    tab.complete 
+                      ? 'border-green-200 bg-green-50' 
+                      : 'border-gray-200 bg-gray-50'
+                  }`}>
+                    <div className="flex items-center space-x-3 mb-2">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        tab.complete 
+                          ? 'bg-green-500 text-white' 
+                          : 'bg-gray-300 text-gray-600'
+                      }`}>
+                        {tab.complete ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Icon className="h-4 w-4" />
+                        )}
+                      </div>
+                      <div>
+                        <h4 className={`font-medium ${
+                          tab.complete ? 'text-green-900' : 'text-gray-900'
+                        }`}>
+                          {tab.label}
+                        </h4>
+                        <p className={`text-xs ${
+                          tab.complete ? 'text-green-700' : 'text-gray-600'
+                        }`}>
+                          {tab.complete ? 'Complete' : tab.description}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`w-full text-sm font-medium py-2 px-3 rounded transition-colors ${
+                        tab.complete
+                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                      }`}
+                    >
+                      {tab.complete ? 'Review' : 'Complete'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {isLogisticsComplete() && (
+              <div className="mt-6 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
+                      <Check className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-semibold text-green-900">All sections complete! 🎉</h4>
+                      <p className="text-sm text-green-700">Your logistics plan is ready for review and finalization.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Day-of Schedule Preview */}
         <div className="bg-white rounded-lg shadow-sm border mb-8">
           <div className="p-6 border-b">
@@ -662,34 +989,60 @@ export default function EventLogistics() {
                 <h2 className="text-xl font-semibold text-gray-900">Day-of Schedule Preview</h2>
                 <p className="text-gray-600 mt-1">Your event day timeline. Use the setup tabs below to configure team roles, activities, and schedule items.</p>
               </div>
-              <button 
+              <ModalButton
+                variant="logistics"
                 onClick={printSchedule}
-                className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                icon={
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                }
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                </svg>
-                <span>Print Schedule</span>
-              </button>
+                Print Schedule
+              </ModalButton>
             </div>
           </div>
           
-          {/* Schedule Preview */}
+          {/* Schedule Preview - Sidebar Style */}
           <div className="p-6">
-            <div className="space-y-3">
-              {dayOfSchedule.map((item) => (
-                <div key={item.id} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg">
-                  <div className="text-sm font-medium text-gray-900 min-w-[60px]">{item.time}</div>
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{item.activity}</div>
-                    <div className="text-sm text-gray-600">{item.location} • {item.responsible}</div>
+            <div className="space-y-2">
+              {dayOfSchedule.length > 0 ? (
+                dayOfSchedule.map((item, index) => (
+                  <div key={item.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <div className="text-sm font-medium text-gray-900 min-w-[60px]">{item.time}</div>
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">{item.activity}</div>
+                          <div className="text-sm text-gray-600">{item.location}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          {item.responsible}
+                        </span>
+                        <button
+                          onClick={() => editScheduleItem(item)}
+                          className="text-blue-600 hover:text-blue-800 p-1"
+                          title="Edit schedule item"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {item.notes && (
+                      <div className="px-4 pb-4">
+                        <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                          <span className="font-medium">Notes:</span> {item.notes}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
-              {dayOfSchedule.length === 0 && (
+                ))
+              ) : (
                 <div className="text-center py-8 text-gray-500">
                   <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p>No schedule items yet. Use the setup tabs below to build your day-of schedule.</p>
+                  <p>No schedule items yet. Use the Schedule Items tab below to build your day-of timeline.</p>
                 </div>
               )}
             </div>
@@ -760,37 +1113,43 @@ export default function EventLogistics() {
                       <h3 className="text-lg font-semibold mb-4">Add Team Member</h3>
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                          <input
-                            type="text"
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Team Member</label>
+                          <select
                             value={newTeamMember.name}
-                            onChange={(e) => setNewTeamMember({...newTeamMember, name: e.target.value})}
+                            onChange={(e) => {
+                              const selectedCoach = coaches.find(coach => coach.name === e.target.value);
+                              if (selectedCoach) {
+                                setNewTeamMember({
+                                  ...newTeamMember, 
+                                  name: selectedCoach.name,
+                                  email: selectedCoach.email,
+                                  phone: selectedCoach.phone,
+                                });
+                              }
+                            }}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                          <input
-                            type="email"
-                            value={newTeamMember.email}
-                            onChange={(e) => setNewTeamMember({...newTeamMember, email: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                          <input
-                            type="tel"
-                            value={newTeamMember.phone}
-                            onChange={(e) => setNewTeamMember({...newTeamMember, phone: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
+                          >
+                            <option value="">Select a team member</option>
+                            {coaches.map((coach) => (
+                              <option key={coach.id} value={coach.name}>
+                                {coach.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                           <select
                             value={newTeamMember.role}
-                            onChange={(e) => setNewTeamMember({...newTeamMember, role: e.target.value})}
+                            onChange={(e) => {
+                              const selectedRole = e.target.value;
+                              const defaultArrivalTime = getDefaultArrivalTime(selectedRole);
+                              setNewTeamMember({
+                                ...newTeamMember, 
+                                role: selectedRole,
+                                arrivalTime: defaultArrivalTime
+                              });
+                            }}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                           >
                             <option value="">Select a role</option>
@@ -800,14 +1159,44 @@ export default function EventLogistics() {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Arrival Time</label>
-                          <input
-                            type="text"
-                            value={newTeamMember.arrivalTime}
-                            onChange={(e) => setNewTeamMember({...newTeamMember, arrivalTime: e.target.value})}
-                            placeholder="e.g., 2 hours before event"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Arrival Time
+                            {newTeamMember.role && newTeamMember.arrivalTime !== -60 && (
+                              <span className="text-xs text-blue-600 ml-2">(Auto-set for {newTeamMember.role})</span>
+                            )}
+                          </label>
+                          <select
+                            value={newTeamMember.arrivalTime === 'custom' ? 'custom' : newTeamMember.arrivalTime.toString()}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === 'custom') {
+                                setNewTeamMember({...newTeamMember, arrivalTime: 'custom'});
+                              } else if (value !== '') {
+                                setNewTeamMember({...newTeamMember, arrivalTime: parseInt(value)});
+                              }
+                            }}
+                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                              newTeamMember.role && newTeamMember.arrivalTime !== -60 
+                                ? 'border-blue-300 bg-blue-50' 
+                                : 'border-gray-300'
+                            }`}
+                          >
+                            <option value="">Select arrival time</option>
+                            {ARRIVAL_TIME_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {newTeamMember.arrivalTime === 'custom' && (
+                            <input
+                              type="text"
+                              placeholder="Enter custom time (e.g., 15 minutes before)"
+                              value={newTeamMember.customArrivalTime}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 mt-2"
+                              onChange={(e) => setNewTeamMember({...newTeamMember, customArrivalTime: e.target.value})}
+                            />
+                          )}
                         </div>
                       </div>
                       <div className="flex justify-end space-x-3 mt-6">
@@ -837,31 +1226,32 @@ export default function EventLogistics() {
                       </h3>
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                          <input
-                            type="text"
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Assign Team Member *</label>
+                          <select
                             value={editingTeamMember.name}
-                            onChange={(e) => setEditingTeamMember({...editingTeamMember, name: e.target.value})}
+                            onChange={(e) => {
+                              const selectedCoach = coaches.find(coach => coach.name === e.target.value);
+                              if (selectedCoach) {
+                                // Set smart default arrival time based on role
+                                const defaultArrivalTime = getDefaultArrivalTime(editingTeamMember.role);
+                                setEditingTeamMember({
+                                  ...editingTeamMember,
+                                  name: selectedCoach.name,
+                                  email: selectedCoach.email,
+                                  phone: selectedCoach.phone,
+                                  arrivalTime: defaultArrivalTime
+                                });
+                              }
+                            }}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                          <input
-                            type="email"
-                            value={editingTeamMember.email}
-                            onChange={(e) => setEditingTeamMember({...editingTeamMember, email: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                          <input
-                            type="tel"
-                            value={editingTeamMember.phone}
-                            onChange={(e) => setEditingTeamMember({...editingTeamMember, phone: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
+                          >
+                            <option value="">Select team member</option>
+                            {coaches.map((coach) => (
+                              <option key={coach.id} value={coach.name}>
+                                {coach.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
@@ -873,14 +1263,44 @@ export default function EventLogistics() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Arrival Time</label>
-                          <input
-                            type="text"
-                            value={editingTeamMember.arrivalTime}
-                            onChange={(e) => setEditingTeamMember({...editingTeamMember, arrivalTime: e.target.value})}
-                            placeholder="e.g., 2 hours before event"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Arrival Time
+                            {editingTeamMember.role && editingTeamMember.arrivalTime !== -60 && editingTeamMember.arrivalTime !== 'custom' && (
+                              <span className="text-xs text-blue-600 ml-2">(Auto-set for {editingTeamMember.role})</span>
+                            )}
+                          </label>
+                          <select
+                            value={getArrivalTimeDropdownValue(editingTeamMember.arrivalTime)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === 'custom') {
+                                setEditingTeamMember({...editingTeamMember, arrivalTime: 'custom'});
+                              } else if (value !== '') {
+                                setEditingTeamMember({...editingTeamMember, arrivalTime: parseInt(value)});
+                              }
+                            }}
+                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                              editingTeamMember.role && editingTeamMember.arrivalTime !== -60 && editingTeamMember.arrivalTime !== 'custom'
+                                ? 'border-blue-300 bg-blue-50' 
+                                : 'border-gray-300'
+                            }`}
+                          >
+                            <option value="">Select arrival time</option>
+                            {ARRIVAL_TIME_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {editingTeamMember.arrivalTime === 'custom' && (
+                            <input
+                              type="text"
+                              placeholder="Enter custom time (e.g., 15 minutes before)"
+                              value={editingTeamMember.customArrivalTime || ''}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 mt-2"
+                              onChange={(e) => setEditingTeamMember({...editingTeamMember, customArrivalTime: e.target.value})}
+                            />
+                          )}
                         </div>
                       </div>
                       <div className="flex justify-end space-x-3 mt-6">
@@ -949,7 +1369,7 @@ export default function EventLogistics() {
                               )}
                               <div className="flex items-center space-x-1">
                                 <Clock className="h-4 w-4" />
-                                <span>Arrive: {member.arrivalTime}</span>
+                                <span>Arrive: {getArrivalTimeLabel(member.arrivalTime)}</span>
                               </div>
                             </div>
                             <div>
@@ -993,13 +1413,13 @@ export default function EventLogistics() {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-lg font-semibold text-gray-900">Event Activities</h2>
-                  <button
+                  <ModalButton
+                    variant="save"
                     onClick={() => setShowAddActivity(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                    icon={<Plus className="h-4 w-4" />}
                   >
-                    <Plus className="h-4 w-4" />
-                    <span>Add Activity</span>
-                  </button>
+                    Add Activity
+                  </ModalButton>
                 </div>
 
                 {/* Add Activity Modal */}
@@ -1050,12 +1470,18 @@ export default function EventLogistics() {
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Activity Leader</label>
-                          <input
-                            type="text"
+                          <select
                             value={newActivity.leader}
                             onChange={(e) => setNewActivity({...newActivity, leader: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
+                          >
+                            <option value="">Select activity leader</option>
+                            {coaches.map((coach) => (
+                              <option key={coach.id} value={coach.name}>
+                                {coach.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
@@ -1074,12 +1500,132 @@ export default function EventLogistics() {
                         >
                           Cancel
                         </button>
-                        <button
+                        <ModalButton
+                          variant="save"
                           onClick={addActivity}
-                          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                          icon={<Plus className="h-4 w-4" />}
                         >
                           Add Activity
+                        </ModalButton>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Edit Activity Modal */}
+                {showEditActivity && editingActivity && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                      <h3 className="text-lg font-semibold mb-4">Edit Activity</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Activity Name</label>
+                          <input
+                            type="text"
+                            value={editingActivity.name}
+                            onChange={(e) => setEditingActivity({...editingActivity, name: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                          <textarea
+                            value={editingActivity.description}
+                            onChange={(e) => setEditingActivity({...editingActivity, description: e.target.value})}
+                            rows={3}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                            <input
+                              type="time"
+                              value={editingActivity.startTime}
+                              onChange={(e) => setEditingActivity({...editingActivity, startTime: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                            <input
+                              type="time"
+                              value={editingActivity.endTime}
+                              onChange={(e) => setEditingActivity({...editingActivity, endTime: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Activity Leader</label>
+                          <select
+                            value={editingActivity.leader}
+                            onChange={(e) => setEditingActivity({...editingActivity, leader: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          >
+                            <option value="">Select activity leader</option>
+                            {coaches.map((coach) => (
+                              <option key={coach.id} value={coach.name}>
+                                {coach.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                          <input
+                            type="text"
+                            value={editingActivity.location}
+                            onChange={(e) => setEditingActivity({...editingActivity, location: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Materials</label>
+                          <div className="space-y-2">
+                            {editingActivity.materials.map((material, index) => (
+                              <input
+                                key={index}
+                                type="text"
+                                value={material}
+                                onChange={(e) => {
+                                  const newMaterials = [...editingActivity.materials];
+                                  newMaterials[index] = e.target.value;
+                                  setEditingActivity({...editingActivity, materials: newMaterials});
+                                }}
+                                placeholder={`Material ${index + 1}`}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              />
+                            ))}
+                            <button
+                              onClick={() => setEditingActivity({
+                                ...editingActivity, 
+                                materials: [...editingActivity.materials, '']
+                              })}
+                              className="text-primary-600 hover:text-primary-700 text-sm"
+                            >
+                              + Add Material
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex justify-end space-x-3 mt-6">
+                        <button
+                          onClick={() => {
+                            setShowEditActivity(false);
+                            setEditingActivity(null);
+                          }}
+                          className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                        >
+                          Cancel
                         </button>
+                        <ModalButton
+                          variant="save"
+                          onClick={updateActivity}
+                          icon={<Save className="h-4 w-4" />}
+                        >
+                          Update Activity
+                        </ModalButton>
                       </div>
                     </div>
                   </div>
@@ -1119,12 +1665,20 @@ export default function EventLogistics() {
                             </p>
                           </div>
                         </div>
-                        <button
-                          onClick={() => removeActivity(activity.id)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => editActivity(activity)}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => removeActivity(activity.id)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </motion.div>
                   ))}
@@ -1137,13 +1691,13 @@ export default function EventLogistics() {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-lg font-semibold text-gray-900">Day-of Schedule</h2>
-                  <button
+                  <ModalButton
+                    variant="save"
                     onClick={() => setShowAddScheduleItem(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                    icon={<Plus className="h-4 w-4" />}
                   >
-                    <Plus className="h-4 w-4" />
-                    <span>Add Schedule Item</span>
-                  </button>
+                    Add Schedule Item
+                  </ModalButton>
                 </div>
 
                 {/* Add Schedule Item Modal */}
@@ -1181,12 +1735,18 @@ export default function EventLogistics() {
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Responsible Person</label>
-                          <input
-                            type="text"
+                          <select
                             value={newScheduleItem.responsible}
                             onChange={(e) => setNewScheduleItem({...newScheduleItem, responsible: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
+                          >
+                            <option value="">Select responsible person</option>
+                            {coaches.map((coach) => (
+                              <option key={coach.id} value={coach.name}>
+                                {coach.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
@@ -1205,12 +1765,93 @@ export default function EventLogistics() {
                         >
                           Cancel
                         </button>
-                        <button
+                        <ModalButton
+                          variant="save"
                           onClick={addScheduleItem}
-                          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                          icon={<Plus className="h-4 w-4" />}
                         >
                           Add Item
+                        </ModalButton>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Edit Schedule Item Modal */}
+                {showEditScheduleItem && editingScheduleItem && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                      <h3 className="text-lg font-semibold mb-4">Edit Schedule Item</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                          <input
+                            type="time"
+                            value={editingScheduleItem.time}
+                            onChange={(e) => setEditingScheduleItem({...editingScheduleItem, time: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Activity</label>
+                          <input
+                            type="text"
+                            value={editingScheduleItem.activity}
+                            onChange={(e) => setEditingScheduleItem({...editingScheduleItem, activity: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                          <input
+                            type="text"
+                            value={editingScheduleItem.location}
+                            onChange={(e) => setEditingScheduleItem({...editingScheduleItem, location: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Responsible Person</label>
+                          <select
+                            value={editingScheduleItem.responsible}
+                            onChange={(e) => setEditingScheduleItem({...editingScheduleItem, responsible: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          >
+                            <option value="">Select responsible person</option>
+                            {coaches.map((coach) => (
+                              <option key={coach.id} value={coach.name}>
+                                {coach.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                          <textarea
+                            value={editingScheduleItem.notes}
+                            onChange={(e) => setEditingScheduleItem({...editingScheduleItem, notes: e.target.value})}
+                            rows={2}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end space-x-3 mt-6">
+                        <button
+                          onClick={() => {
+                            setShowEditScheduleItem(false);
+                            setEditingScheduleItem(null);
+                          }}
+                          className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                        >
+                          Cancel
                         </button>
+                        <ModalButton
+                          variant="save"
+                          onClick={updateScheduleItem}
+                          icon={<Save className="h-4 w-4" />}
+                        >
+                          Update Item
+                        </ModalButton>
                       </div>
                     </div>
                   </div>
@@ -1250,12 +1891,20 @@ export default function EventLogistics() {
                               <p className="text-sm text-gray-600">{item.notes}</p>
                             )}
                           </div>
-                          <button
-                            onClick={() => removeScheduleItem(item.id)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => editScheduleItem(item)}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => removeScheduleItem(item.id)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </motion.div>
                     ))}
@@ -1268,13 +1917,13 @@ export default function EventLogistics() {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-lg font-semibold text-gray-900">Contact List</h2>
-                  <button
+                  <ModalButton
+                    variant="save"
                     onClick={() => setShowAddContact(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                    icon={<Plus className="h-4 w-4" />}
                   >
-                    <Plus className="h-4 w-4" />
-                    <span>Add Contact</span>
-                  </button>
+                    Add Contact
+                  </ModalButton>
                 </div>
 
                 {/* Add Contact Modal */}
@@ -1352,12 +2001,13 @@ export default function EventLogistics() {
                         >
                           Cancel
                         </button>
-                        <button
+                        <ModalButton
+                          variant="save"
                           onClick={addContact}
-                          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                          icon={<Plus className="h-4 w-4" />}
                         >
                           Add Contact
-                        </button>
+                        </ModalButton>
                       </div>
                     </div>
                   </div>
@@ -1597,23 +2247,94 @@ export default function EventLogistics() {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex justify-center space-x-4">
-          <button
-            onClick={() => window.location.href = '/'}
-            className="px-6 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            View Calendar
-          </button>
-          
-          <button
-            onClick={() => window.location.href = '/event-setup'}
-            className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-          >
-            Create Another Event
-          </button>
-        </div>
+
       </main>
+
+      {/* Logistics Completion Modal */}
+      {showCompletionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 w-full max-w-md mx-4">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                <Check className="h-6 w-6 text-green-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Logistics Planning Complete! 🎉
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Your event logistics are ready. Here's what you can do next:
+              </p>
+              
+              <div className="space-y-4 mb-6">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-3">Logistics Summary</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">Team Members:</span>
+                      <span className="ml-2 font-medium">{teamMembers.filter(m => m.name !== 'Unassigned').length}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Activities:</span>
+                      <span className="ml-2 font-medium">{activities.length}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Schedule Items:</span>
+                      <span className="ml-2 font-medium">{dayOfSchedule.length}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Contacts:</span>
+                      <span className="ml-2 font-medium">{contacts.length}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+                  <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  <span className="text-sm font-medium text-blue-900">Print your logistics plan for the team</span>
+                </div>
+                
+                <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
+                  <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 0V7a2 2 0 012-2h4a2 2 0 012 2v0M8 7v10a2 2 0 002 2h4a2 2 0 002-2V7M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V9a2 2 0 00-2-2h-2" />
+                  </svg>
+                  <span className="text-sm font-medium text-green-900">Return to calendar to see your event</span>
+                </div>
+              </div>
+              
+              <div className="flex flex-col space-y-3">
+                <button
+                  onClick={() => {
+                    printSchedule();
+                    setShowCompletionModal(false);
+                  }}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                >
+                  Print Logistics Plan
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowCompletionModal(false);
+                    window.location.href = '/';
+                  }}
+                  className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                >
+                  Return to Calendar
+                </button>
+                
+                <button
+                  onClick={() => setShowCompletionModal(false)}
+                  className="w-full px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+                >
+                  Continue Editing
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

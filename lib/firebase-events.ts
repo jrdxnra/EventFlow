@@ -1,4 +1,4 @@
-import { collection, addDoc, updateDoc, doc, getDocs, query, orderBy, getDoc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, getDocs, query, orderBy, getDoc, deleteDoc } from 'firebase/firestore';
 
 import { db } from './firebase';
 import { EventData, TimelineItem } from './types';
@@ -21,7 +21,7 @@ export const createEvent = async (formData: EventFormData, userId?: string): Pro
       },
 
       eventPurpose: formData.eventPurpose,
-      coachSupport: formData.coachSupport,
+      teamRoles: formData.teamRoles,
       marketingChannels: formData.marketingChannels,
       ticketingNeeds: formData.ticketingNeeds || '',
       gemsDetails: formData.gemsDetails || '',
@@ -54,19 +54,42 @@ export const createEvent = async (formData: EventFormData, userId?: string): Pro
 
 export const updateEvent = async (eventId: string, eventData: Partial<EventData>): Promise<void> => {
   try {
+    console.log('📝 FIREBASE UPDATE: Attempting to update event:', eventId);
+    
+    if (!eventId) {
+      throw new Error('Event ID is required for update');
+    }
+    
     const eventRef = doc(db, 'events', eventId);
     await updateDoc(eventRef, {
       ...eventData,
       updatedAt: new Date(),
     });
-  } catch (error) {
-    console.error('Error updating event:', error);
-    throw new Error('Failed to update event');
+    
+    console.log('✅ FIREBASE UPDATE: Successfully updated event:', eventId);
+  } catch (error: any) {
+    console.error('🚨 Error updating event:', error);
+    console.error('🚨 Update error details:', {
+      eventId,
+      code: error?.code || 'no-code',
+      message: error?.message || 'no-message',
+      errorType: typeof error,
+    });
+    
+    // Preserve the original Firebase error message for better debugging
+    if (error?.message?.includes('No document to update')) {
+      throw new Error(`No document to update: projects/eventflow-exos/databases/(default)/documents/events/${eventId}`);
+    } else if (error?.code === 'not-found') {
+      throw new Error('Event not found: The event may have been deleted');
+    } else {
+      throw new Error(`Failed to update event: ${error?.message || 'Unknown error'}`);
+    }
   }
 };
 
 export const getEvents = async (): Promise<EventData[]> => {
   try {
+    console.log('🔥 FIREBASE READ: getEvents() called from:', new Error().stack?.split('\n')[2]?.trim());
     const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
@@ -81,6 +104,7 @@ export const getEvents = async (): Promise<EventData[]> => {
 
 export const getEventById = async (eventId: string): Promise<EventData | null> => {
   try {
+    console.log('🔥 FIREBASE READ: getEventById() called for eventId:', eventId, 'from:', new Error().stack?.split('\n')[2]?.trim());
     const eventRef = doc(db, 'events', eventId);
     const eventDoc = await getDoc(eventRef);
     
@@ -107,5 +131,15 @@ export const updateEventTimelineItem = async (eventId: string, timelineItems: Ti
   } catch (error) {
     console.error('Error updating event timeline items:', error);
     throw new Error('Failed to update event timeline items');
+  }
+};
+
+export const deleteEvent = async (eventId: string): Promise<void> => {
+  try {
+    const eventRef = doc(db, 'events', eventId);
+    await deleteDoc(eventRef);
+  } catch (error) {
+    console.error('Error deleting event:', error);
+    throw new Error('Failed to delete event');
   }
 }; 

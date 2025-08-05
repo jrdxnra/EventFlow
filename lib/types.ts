@@ -26,7 +26,7 @@ export interface EventData {
   }
 
   eventPurpose: string
-  coachSupport: string
+  teamRoles: string[]
   marketingChannels: string[]
   ticketingNeeds: string
   gemsDetails: string

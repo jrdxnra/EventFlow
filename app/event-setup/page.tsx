@@ -8,23 +8,25 @@ import { useState, useEffect } from 'react';
 
 import { auth } from '@/lib/firebase';
 import { createEventByProfile } from '@/lib/firebase-multi-profile';
-import { EventData } from '@/lib/types';
+import { getCoaches } from '@/lib/firebase-coaches';
+import { EventData, Coach } from '@/lib/types';
 import { validateFormData, EventFormData } from '@/lib/validation';
+import { EVENT_TYPES, MARKETING_CHANNELS, TICKETING_OPTIONS, DEFAULT_GEMS_DETAILS, TEAM_ROLES } from '@/lib/event-constants';
 
 
 // Quick-fill templates for different event types
 const eventTemplates = [
   {
     id: 'popup-class',
-    title: 'Pop-up Class',
+    title: 'Pop up Event',
     description: 'Quick outdoor or indoor session',
     icon: Zap,
     color: 'bg-green-500',
     defaults: {
       eventType: 'popup-class',
-      eventScope: 'team' as const, // Pop-up classes are typically team events
+      eventScope: 'team' as const,
       marketingChannels: ['media', 'email'],
-      coachSupport: 'solo',
+      teamRoles: ['Event Lead'],
       specialRequirements: 'Portable equipment, outdoor space',
     },
   },
@@ -36,10 +38,10 @@ const eventTemplates = [
     color: 'bg-blue-500',
     defaults: {
       eventType: 'workshop',
-      eventScope: 'team' as const, // Workshops are typically team events
+      eventScope: 'team' as const,
       marketingChannels: ['media', 'email', 'flyers'],
-      coachSupport: 'team',
-      specialRequirements: 'Classroom setup, presentation materials',
+      teamRoles: ['Event Lead', 'Setup Coordinator', 'Activities Coordinator'],
+      specialRequirements: 'Workshop materials and setup',
     },
   },
   {
@@ -52,7 +54,7 @@ const eventTemplates = [
       eventType: 'challenge',
       eventScope: 'team' as const, // Challenges are typically team events
       marketingChannels: ['media', 'email', 'collaborations'],
-      coachSupport: 'team',
+      teamRoles: ['Event Lead', 'Activities Coordinator', 'Registration Lead'],
       specialRequirements: 'Progress tracking, daily check-ins',
     },
   },
@@ -66,7 +68,7 @@ const eventTemplates = [
       eventType: 'seminar',
       eventScope: 'team' as const, // Seminars are typically team events
       marketingChannels: ['media', 'email', 'flyers', 'collaborations'],
-      coachSupport: 'full-support',
+      teamRoles: ['Event Lead', 'Setup Coordinator', 'Registration Lead', 'Guest Relations', 'Tech Support'],
       specialRequirements: 'Venue with presentation capabilities, catering',
     },
   },
@@ -109,6 +111,8 @@ export default function EventSetup() {
   const [isLoading, setIsLoading] = useState(true);
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdEventId, setCreatedEventId] = useState<string | null>(null);
+  const [coaches, setCoaches] = useState<Coach[]>([]);
+  const [showAddNewContact, setShowAddNewContact] = useState(false);
 
   
   const [formData, setFormData] = useState<EventFormData>({
@@ -125,7 +129,7 @@ export default function EventSetup() {
     },
 
     eventPurpose: '',
-    coachSupport: '',
+    teamRoles: [],
     marketingChannels: [],
     ticketingNeeds: '',
     gemsDetails: '',
@@ -197,6 +201,22 @@ export default function EventSetup() {
     loadDraft();
   }, []);
 
+  // Load coaches for Point of Contact dropdown
+  useEffect(() => {
+    const loadCoaches = async () => {
+      try {
+        const coachesData = await getCoaches();
+        setCoaches(coachesData);
+      } catch (error) {
+        console.error('Error loading coaches:', error);
+      }
+    };
+    
+    if (user) {
+      loadCoaches();
+    }
+  }, [user]);
+
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId);
     const template = eventTemplates.find(t => t.id === templateId);
@@ -206,7 +226,7 @@ export default function EventSetup() {
         eventType: template.defaults.eventType,
         eventScope: template.defaults.eventScope,
         marketingChannels: template.defaults.marketingChannels,
-        coachSupport: template.defaults.coachSupport,
+        teamRoles: template.defaults.teamRoles,
         specialRequirements: template.defaults.specialRequirements,
       }));
     }
@@ -234,6 +254,19 @@ export default function EventSetup() {
     // Clear error when user starts typing
     if (errors[`pointOfContact.${field}`]) {
       setErrors(prev => ({ ...prev, [`pointOfContact.${field}`]: '' }));
+    }
+  };
+
+  const handleTeamRoleChange = (role: string, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      teamRoles: checked 
+        ? [...prev.teamRoles, role]
+        : prev.teamRoles.filter(r => r !== role)
+    }));
+    // Clear error when user selects roles
+    if (errors.teamRoles) {
+      setErrors(prev => ({ ...prev, teamRoles: '' }));
     }
   };
 
@@ -265,7 +298,7 @@ export default function EventSetup() {
       },
       3: () => {
         const errors: Record<string, string> = {};
-        if (!formData.coachSupport) errors.coachSupport = 'Coach support level is required';
+        if (!formData.teamRoles || formData.teamRoles.length === 0) errors.teamRoles = 'At least one team role is required';
         if (formData.marketingChannels.length === 0) errors.marketingChannels = 'Select at least one marketing channel';
         setErrors(errors);
         return Object.keys(errors).length === 0;
@@ -332,7 +365,7 @@ export default function EventSetup() {
             phone: formData.pointOfContact.phone || '',
           },
           eventPurpose: formData.eventPurpose,
-          coachSupport: formData.coachSupport,
+          teamRoles: formData.teamRoles,
           marketingChannels: formData.marketingChannels,
           ticketingNeeds: formData.ticketingNeeds || '',
           gemsDetails: formData.gemsDetails || '',
@@ -567,47 +600,85 @@ export default function EventSetup() {
               
             <div>
               <label className="form-label">Point of Contact *</label>
-              <input
-                type="text"
-                className={`form-input ${getFieldError('pointOfContact.name') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
-                placeholder="Your name or main contact person"
-                value={formData.pointOfContact.name}
-                onChange={(e) => handleContactChange('name', e.target.value)}
-              />
-              {getFieldError('pointOfContact.name') && (
-                <p className="form-error flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-1" />
-                  {getFieldError('pointOfContact.name')}
-                </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Email *</label>
-                <input
-                  type="email"
-                  className={`form-input ${getFieldError('pointOfContact.email') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
-                  placeholder="contact@yourbusiness.com"
-                  value={formData.pointOfContact.email}
-                  onChange={(e) => handleContactChange('email', e.target.value)}
-                />
-                {getFieldError('pointOfContact.email') && (
+              <div className="space-y-4">
+                <select
+                  className={`form-input ${getFieldError('pointOfContact.name') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
+                  value={formData.pointOfContact.name}
+                  onChange={(e) => {
+                    if (e.target.value === 'add-new') {
+                      setShowAddNewContact(true);
+                      handleContactChange('name', '');
+                      handleContactChange('email', '');
+                      handleContactChange('phone', '');
+                    } else {
+                      const selectedCoach = coaches.find(coach => coach.name === e.target.value);
+                      if (selectedCoach) {
+                        setShowAddNewContact(false);
+                        handleContactChange('name', selectedCoach.name);
+                        handleContactChange('email', selectedCoach.email);
+                        handleContactChange('phone', selectedCoach.phone);
+                      }
+                    }
+                  }}
+                >
+                  <option value="">Select a team member</option>
+                  {coaches.map((coach) => (
+                    <option key={coach.id} value={coach.name}>
+                      {coach.name}
+                    </option>
+                  ))}
+                  <option value="add-new">+ Add New Person</option>
+                </select>
+                {getFieldError('pointOfContact.name') && (
                   <p className="form-error flex items-center">
                     <AlertCircle className="h-4 w-4 mr-1" />
-                    {getFieldError('pointOfContact.email')}
+                    {getFieldError('pointOfContact.name')}
                   </p>
                 )}
-              </div>
-              <div>
-                <label className="form-label">Phone</label>
-                <input
-                  type="tel"
-                  className="form-input"
-                  placeholder="(555) 123-4567"
-                  value={formData.pointOfContact.phone}
-                  onChange={(e) => handleContactChange('phone', e.target.value)}
-                />
+
+                {/* Show input fields when "Add New Person" is selected or no coaches loaded */}
+                {(showAddNewContact || coaches.length === 0) && (
+                  <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <label className="form-label">Name *</label>
+                      <input
+                        type="text"
+                        className={`form-input ${getFieldError('pointOfContact.name') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
+                        placeholder="Enter person's name"
+                        value={formData.pointOfContact.name}
+                        onChange={(e) => handleContactChange('name', e.target.value)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="form-label">Email *</label>
+                        <input
+                          type="email"
+                          className={`form-input ${getFieldError('pointOfContact.email') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
+                          placeholder="contact@example.com"
+                          value={formData.pointOfContact.email}
+                          onChange={(e) => handleContactChange('email', e.target.value)}
+                        />
+                        {getFieldError('pointOfContact.email') && (
+                          <p className="form-error flex items-center">
+                            <AlertCircle className="h-4 w-4 mr-1" />
+                            {getFieldError('pointOfContact.email')}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="form-label">Phone</label>
+                        <input
+                          type="tel"
+                          className="form-input"
+                          placeholder="(555) 123-4567"
+                          value={formData.pointOfContact.phone}
+                          onChange={(e) => handleContactChange('phone', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -645,22 +716,25 @@ export default function EventSetup() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Support & Logistics</h3>
               
             <div>
-              <label className="form-label">Coach Support Needed *</label>
-              <select
-                className={`form-input ${getFieldError('coachSupport') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
-                value={formData.coachSupport}
-                onChange={(e) => handleInputChange('coachSupport', e.target.value)}
-              >
-                <option value="">Select support level</option>
-                <option value="solo">Solo - I'll handle everything</option>
-                <option value="assistant">Assistant - Need 1-2 helpers</option>
-                <option value="team">Team - Need 3+ team members</option>
-                <option value="full-support">Full Support - Need comprehensive team</option>
-              </select>
-              {getFieldError('coachSupport') && (
-                <p className="form-error flex items-center">
+              <label className="form-label">Team Roles Needed *</label>
+              <p className="text-sm text-gray-600 mb-3">Select the roles you'll need help with for this event</p>
+              <div className="grid grid-cols-2 gap-3">
+                {TEAM_ROLES.map((role) => (
+                  <label key={role} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      checked={formData.teamRoles.includes(role)}
+                      onChange={(e) => handleTeamRoleChange(role, e.target.checked)}
+                    />
+                    <span className="text-sm text-gray-700">{role}</span>
+                  </label>
+                ))}
+              </div>
+              {getFieldError('teamRoles') && (
+                <p className="form-error flex items-center mt-2">
                   <AlertCircle className="h-4 w-4 mr-1" />
-                  {getFieldError('coachSupport')}
+                  {getFieldError('teamRoles')}
                 </p>
               )}
             </div>
@@ -668,13 +742,7 @@ export default function EventSetup() {
             <div>
               <label className="form-label">Marketing Channels *</label>
               <div className="space-y-2">
-                {[
-                  { id: 'media', label: 'Media' },
-                  { id: 'email', label: 'Email Marketing' },
-                  { id: 'flyers', label: 'Flyers & Posters' },
-                  { id: 'collaborations', label: 'Collaborations' },
-                  { id: 'showy', label: 'Showy' },
-                ].map((channel) => (
+                {MARKETING_CHANNELS.map((channel) => (
                   <label key={channel.id} className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -703,28 +771,19 @@ export default function EventSetup() {
             <div>
               <label className="form-label">GEMS Ticket (Optional)</label>
               <div className="flex items-center space-x-4">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    name="gemsTicket"
-                    value="yes"
-                    checked={formData.ticketingNeeds === 'yes'}
-                    onChange={(e) => handleInputChange('ticketingNeeds', e.target.value)}
-                    className="text-primary-600 focus:ring-primary-500"
-                  />
-                  <span className="text-sm text-gray-700">Yes - Need tables, chairs, supplies</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    name="gemsTicket"
-                    value="no"
-                    checked={formData.ticketingNeeds === 'no'}
-                    onChange={(e) => handleInputChange('ticketingNeeds', e.target.value)}
-                    className="text-primary-600 focus:ring-primary-500"
-                  />
-                  <span className="text-sm text-gray-700">No - Bringing own equipment</span>
-                </label>
+                {TICKETING_OPTIONS.map((option) => (
+                  <label key={option.value} className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      name="gemsTicket"
+                      value={option.value}
+                      checked={formData.ticketingNeeds === option.value}
+                      onChange={(e) => handleInputChange('ticketingNeeds', e.target.value)}
+                      className="text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-gray-700">{option.label}</span>
+                  </label>
+                ))}
               </div>
                 
               {formData.ticketingNeeds === 'yes' && (
@@ -734,9 +793,7 @@ export default function EventSetup() {
                     <textarea
                       className="form-input"
                       rows={4}
-                      value={formData.gemsDetails || `# of Chairs:
-# of Tables:
-# of Table Cloths:`}
+                      value={formData.gemsDetails || DEFAULT_GEMS_DETAILS}
                       onChange={(e) => handleInputChange('gemsDetails', e.target.value)}
                     />
                     <p className="text-sm text-gray-500 mt-1">Just add the quantities next to each item. Add any additional items below the template.</p>
@@ -808,7 +865,7 @@ export default function EventSetup() {
                 <div>
                   <h4 className="font-semibold text-gray-900 mb-2">Logistics</h4>
                   <div className="space-y-1 text-sm text-gray-600">
-                    <p><strong>Support:</strong> {formData.coachSupport}</p>
+                    <p><strong>Team Roles:</strong> {formData.teamRoles.join(', ') || 'None selected'}</p>
                     <p><strong>GEMS Ticket:</strong> {formData.ticketingNeeds === 'yes' ? 'Yes' : 'No'}</p>
                     {formData.ticketingNeeds === 'yes' && formData.gemsDetails && (
                       <div className="mt-2">

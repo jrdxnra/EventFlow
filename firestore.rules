@@ -37,7 +37,7 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated();
-      allow delete: if hasPermission('delete') || isAdmin();
+      allow delete: if isAuthenticated(); // Allow any authenticated user to delete
     }
     
     // Team events - simplified rules for now

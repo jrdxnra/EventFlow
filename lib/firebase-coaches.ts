@@ -43,6 +43,7 @@ export const deleteCoach = async (coachId: string): Promise<void> => {
 
 export const getCoaches = async (): Promise<Coach[]> => {
   try {
+    console.log('🔥 FIREBASE READ: getCoaches() called from:', new Error().stack?.split('\n')[2]?.trim());
     const q = query(collection(db, 'coaches'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
@@ -113,6 +114,7 @@ export const deleteContact = async (contactId: string): Promise<void> => {
 
 export const getContacts = async (): Promise<Contact[]> => {
   try {
+    console.log('🔥 FIREBASE READ: getContacts() called from:', new Error().stack?.split('\n')[2]?.trim());
     const q = query(collection(db, 'contacts'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
@@ -185,8 +187,9 @@ export const updateEventLogistics = async (logisticsId: string, logisticsData: P
 
 export const getEventLogistics = async (eventId: string): Promise<EventLogistics | null> => {
   try {
+    console.log('🔥 FIREBASE READ: getEventLogistics() called for eventId:', eventId, 'from:', new Error().stack?.split('\n')[2]?.trim());
     const q = query(
-      collection(db, 'eventLogistics'), 
+      collection(db, 'eventLogistics'),
       where('eventId', '==', eventId)
     );
     const querySnapshot = await getDocs(q);

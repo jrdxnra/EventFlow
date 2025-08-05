@@ -85,11 +85,48 @@ eventflow/
 
 ## Event Planning Workflow
 
-The app guides users through 9 steps:
+### Current Application Flow
 
-1. **Event Kickoff & Info Gathering** - Collect event details
+```mermaid
+graph TD
+    A["🏠 Main Calendar"] --> B["➕ Create Event"]
+    B --> C["📋 Event Setup Flow"]
+    
+    C --> D["1️⃣ Event Basics<br/>• Event Type<br/>• Date/Time<br/>• Location"]
+    D --> E["2️⃣ Contact & Audience<br/>• Point of Contact<br/>• Event Purpose<br/>• Target Audience"]
+    E --> F["3️⃣ Logistics & Requirements<br/>• Team Role Needs<br/>• Marketing Channels<br/>• Special Requirements"]
+    F --> G["4️⃣ Review & Launch<br/>• Final Review<br/>• Create Event"]
+    
+    G --> H["✅ Event Created"]
+    H --> I["🎯 Auto-Redirect to Logistics"]
+    
+    I --> J["📊 Logistics Page - Tab System"]
+    J --> K["👥 Team Assignment Tab<br/>• Assign Team Members to Roles<br/>• Set Arrival Times<br/>• Contact Info Auto-Filled"]
+    J --> L["📅 Schedule Tab<br/>• Event Timeline<br/>• Responsible Persons<br/>• Activity Details"]
+    J --> M["📞 Contacts Tab<br/>• Team Contacts<br/>• Venue Contacts<br/>• Emergency Contacts"]
+    J --> N["🎯 Activities Tab<br/>• Event Activities<br/>• Activity Management"]
+    
+    K --> O["💾 Save Logistics"]
+    L --> O
+    M --> O
+    N --> O
+    
+    O --> P["🏁 Completion Screen<br/>• Summary of Assignments<br/>• Print Event Plan<br/>• Return to Calendar"]
+    P --> A
+    
+    style C fill:#e1f5fe
+    style I fill:#f3e5f5
+    style J fill:#fff3e0
+    style P fill:#e8f5e8
+```
+
+### Original 9-Step Vision
+
+The app was originally designed to guide users through 9 comprehensive steps:
+
+1. **Event Kickoff & Info Gathering** - Collect event details ✅ *Implemented*
 2. **Marketing & Promotion Schedule** - AI-powered timeline planning
-3. **Day-of Logistics** - Team roles and scheduling
+3. **Day-of Logistics** - Team roles and scheduling ✅ *Implemented*
 4. **Venue & Space Booking** - Location confirmation
 5. **Event Tickets** - GEMS ticket creation
 6. **Marketing Materials** - Flyers and distribution

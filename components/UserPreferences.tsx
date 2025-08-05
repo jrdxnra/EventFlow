@@ -2,10 +2,10 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, User, Bell, Calendar, Monitor } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 import { auth } from '@/lib/firebase';
-import { saveUserPreferences, getUserProfile } from '@/lib/firebase-users';
+import { saveUserPreferences, getUserProfile, updateUserProfile } from '@/lib/firebase-users';
 
 interface UserPreferencesProps {
   isOpen: boolean;
@@ -21,6 +21,11 @@ export default function UserPreferences({ isOpen, onClose }: UserPreferencesProp
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  
+  // Cache for user profiles (full profile, not just preferences)
+  const userProfileCacheRef = useRef<{
+    [uid: string]: { profile: any; timestamp: number };
+  }>({});
 
   useEffect(() => {
     if (isOpen && auth.currentUser) {
@@ -31,9 +36,27 @@ export default function UserPreferences({ isOpen, onClose }: UserPreferencesProp
   const loadUserPreferences = async () => {
     try {
       setIsLoading(true);
-      const userProfile = await getUserProfile(auth.currentUser!.uid);
-      if (userProfile) {
-        setPreferences(userProfile.preferences);
+      
+      // Check cache first
+      const uid = auth.currentUser!.uid;
+      const now = Date.now();
+      const cacheTimeout = process.env.NODE_ENV === 'development' ? 300000 : 600000; // 5 min dev, 10 min prod
+      
+      if (userProfileCacheRef.current[uid] && 
+          (now - userProfileCacheRef.current[uid].timestamp) < cacheTimeout) {
+        console.log('Using cached user profile for preferences');
+        setPreferences(userProfileCacheRef.current[uid].profile.preferences);
+      } else {
+        console.log('Fetching fresh user profile for preferences');
+        const userProfile = await getUserProfile(uid);
+        if (userProfile) {
+          // Cache the full profile
+          userProfileCacheRef.current[uid] = {
+            profile: userProfile,
+            timestamp: now,
+          };
+          setPreferences(userProfile.preferences);
+        }
       }
     } catch (error) {
       console.error('Error loading user preferences:', error);
@@ -49,7 +72,30 @@ export default function UserPreferences({ isOpen, onClose }: UserPreferencesProp
       setIsSaving(true);
       setSaveStatus('saving');
       
-      await saveUserPreferences(auth.currentUser.uid, preferences);
+      // Use cached user profile to avoid additional Firebase read
+      const uid = auth.currentUser.uid;
+      if (userProfileCacheRef.current[uid]) {
+        // Get cached profile and use updateUserProfile directly (no additional Firebase read!)
+        const cachedProfileData = userProfileCacheRef.current[uid].profile;
+        
+        console.log('Saving preferences using cached profile (no Firebase read)');
+        await updateUserProfile(cachedProfileData.id, {
+          preferences: { ...cachedProfileData.preferences, ...preferences },
+        });
+        
+        // Update cache with new preferences
+        userProfileCacheRef.current[uid] = {
+          profile: {
+            ...cachedProfileData,
+            preferences: { ...cachedProfileData.preferences, ...preferences },
+          },
+          timestamp: Date.now(),
+        };
+      } else {
+        // Fallback to original method if no cache
+        console.log('No cached profile, using saveUserPreferences (will make Firebase read)');
+        await saveUserPreferences(uid, preferences);
+      }
       
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);

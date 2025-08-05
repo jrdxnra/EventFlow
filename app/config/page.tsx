@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Users, Settings, Trash2, Edit3, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Trash2, Edit3, Save } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 

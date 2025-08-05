@@ -78,6 +78,7 @@ export const updateUserProfile = async (profileId: string, profileData: Partial<
 
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   try {
+    console.log('🔥 FIREBASE READ: getUserProfile() called for uid:', uid, 'from:', new Error().stack?.split('\n')[2]?.trim());
     const q = query(collection(db, 'userProfiles'), where('uid', '==', uid));
     const querySnapshot = await getDocs(q);
     
@@ -104,6 +105,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
 
 export const getUserProfileById = async (profileId: string): Promise<UserProfile | null> => {
   try {
+    console.log('🔥 FIREBASE READ: getUserProfileById() called for profileId:', profileId, 'from:', new Error().stack?.split('\n')[2]?.trim());
     const profileRef = doc(db, 'userProfiles', profileId);
     const profileDoc = await getDoc(profileRef);
     

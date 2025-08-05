@@ -14,7 +14,7 @@ export const eventFormSchema = z.object({
   }),
 
   eventPurpose: z.string().min(10, 'Please provide a detailed event purpose (at least 10 characters)'),
-  coachSupport: z.string().min(1, 'Coach support level is required'),
+  teamRoles: z.array(z.string()).min(1, 'At least one team role is required'),
   marketingChannels: z.array(z.string()).min(1, 'Select at least one marketing channel'),
   ticketingNeeds: z.string().optional(),
   gemsDetails: z.string().optional(),

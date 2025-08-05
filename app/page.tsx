@@ -8,9 +8,14 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import EventSidebar from '@/components/Sidebar';
 import UserProfile from '@/components/UserProfile';
 import { updateEvent, updateEventTimelineItem } from '@/lib/firebase-events';
-import { getEventsByProfile, MultiProfileEventData } from '@/lib/firebase-multi-profile';
-
-import { EventData } from '@/lib/types';
+import { getEventsByProfile, MultiProfileEventData, deleteEvent } from '@/lib/firebase-multi-profile';
+import { getCoaches, getEventLogistics } from '@/lib/firebase-coaches';
+import { EventData, Coach } from '@/lib/types';
+import { EVENT_TYPES, EVENT_SCOPES, MARKETING_CHANNELS, EVENT_COLORS, TICKETING_OPTIONS, DEFAULT_GEMS_DETAILS, TASK_CATEGORIES, TASK_PRIORITIES, TASK_STATUSES } from '@/lib/event-constants';
+import { TeamMember, getEventContactPerson, getSuggestedAssignee, getAssignedPerson } from '@/lib/role-utils';
+import ModalHeader from '@/components/ModalHeader';
+import { auth } from '@/lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 
 interface GanttItem {
@@ -51,40 +56,105 @@ export default function Home() {
   const [expandedTimelines, setExpandedTimelines] = useState<Set<string>>(new Set());
   const [collapsedEventGroups, setCollapsedEventGroups] = useState<Set<string>>(new Set());
   const [eventTimelines, setEventTimelines] = useState<Record<string, TimelineItem[]>>({});
-  const [showDetailsModal, setShowDetailsModal] = useState<string | null>(null);
-  const [editingEvent, setEditingEvent] = useState<EventData | null>(null);
+
   const [showEventInfoModal, setShowEventInfoModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null);
   const [showTimelineItemModal, setShowTimelineItemModal] = useState(false);
   const [selectedTimelineItem, setSelectedTimelineItem] = useState<TimelineItem | null>(null);
   const [selectedTimelineEventId, setSelectedTimelineEventId] = useState<string>('');
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isTeamMode, setIsTeamMode] = useState(true);
+  const [coaches, setCoaches] = useState<Coach[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   
-  // Cache for events to prevent unnecessary queries
+  // Helper function to initialize events cache from localStorage
+  const initializeEventsCache = () => {
+    // Initialize from localStorage to survive hot reloads
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedEvents = localStorage.getItem('eventflow-events-cache');
+        const cachedLastFetch = localStorage.getItem('eventflow-events-lastfetch');
+        
+        if (cachedEvents && cachedLastFetch) {
+          const events = JSON.parse(cachedEvents);
+          const lastFetch = JSON.parse(cachedLastFetch);
+          console.log('🔄 Restored events cache from localStorage:', { lastFetch });
+          return {
+            team: events.team || null,
+            individual: events.individual || null,
+            lastFetch: lastFetch || { team: 0, individual: 0 },
+          };
+        }
+      } catch (error) {
+        console.error('Error loading events cache from localStorage:', error);
+      }
+    }
+    
+    return {
+      team: null,
+      individual: null,
+      lastFetch: { team: 0, individual: 0 },
+    };
+  };
+
+  // Cache for events to prevent unnecessary queries (with localStorage persistence)
   const eventsCacheRef = useRef<{
     team: MultiProfileEventData[] | null;
     individual: MultiProfileEventData[] | null;
     lastFetch: { team: number; individual: number };
-  }>({
-    team: null,
-    individual: null,
-    lastFetch: { team: 0, individual: 0 },
-  });
+  }>(initializeEventsCache());
 
-  // Cache for timeline data to prevent regeneration
+  // Helper function to initialize timeline cache from localStorage
+  const initializeTimelineCache = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedTimelines = localStorage.getItem('eventflow-timelines-cache');
+        if (cachedTimelines) {
+          const timelines = JSON.parse(cachedTimelines);
+          console.log('🔄 Restored timeline cache from localStorage');
+          return {
+            team: timelines.team || null,
+            individual: timelines.individual || null,
+          };
+        }
+      } catch (error) {
+        console.error('Error loading timeline cache from localStorage:', error);
+      }
+    }
+    
+    return {
+      team: null,
+      individual: null,
+    };
+  };
+
+  // Cache for timeline data to prevent regeneration (with localStorage persistence)
   const timelineCacheRef = useRef<{
     team: Record<string, TimelineItem[]> | null;
     individual: Record<string, TimelineItem[]> | null;
-  }>({
-    team: null,
-    individual: null,
-  });
+  }>(initializeTimelineCache());
+
+  // Helper function to persist timeline cache to localStorage
+  const persistTimelineCache = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('eventflow-timelines-cache', JSON.stringify({
+          team: timelineCacheRef.current.team,
+          individual: timelineCacheRef.current.individual,
+        }));
+        console.log('💾 Persisted timeline cache to localStorage');
+      } catch (error) {
+        console.error('Error saving timeline cache to localStorage:', error);
+      }
+    }
+  };
 
   useEffect(() => {
+    console.log('🔄 Main page useEffect triggered - isTeamMode:', isTeamMode, 'currentUser:', currentUser?.uid);
+    
     const loadEvents = async () => {
       try {
         // Load events based on current profile mode
@@ -134,6 +204,7 @@ export default function Home() {
               ...timelineCacheRef.current,
               [cacheKey]: timelineData,
             };
+            persistTimelineCache();
           }
           return;
         }
@@ -147,6 +218,20 @@ export default function Home() {
           [cacheKey]: eventsData,
           lastFetch: { ...eventsCacheRef.current.lastFetch, [cacheKey]: now },
         };
+        
+        // Persist cache to localStorage to survive hot reloads
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('eventflow-events-cache', JSON.stringify({
+              team: eventsCacheRef.current.team,
+              individual: eventsCacheRef.current.individual,
+            }));
+            localStorage.setItem('eventflow-events-lastfetch', JSON.stringify(eventsCacheRef.current.lastFetch));
+            console.log('💾 Persisted events cache to localStorage');
+          } catch (error) {
+            console.error('Error saving events cache to localStorage:', error);
+          }
+        }
         
         setEvents(eventsData);
         
@@ -182,6 +267,7 @@ export default function Home() {
           ...timelineCacheRef.current,
           [cacheKey]: timelineData,
         };
+        persistTimelineCache();
       } catch (error) {
         console.error('Error loading events:', error);
       } finally {
@@ -200,18 +286,80 @@ export default function Home() {
       // In development, use longer cache times
       const cacheTimeout = process.env.NODE_ENV === 'development' ? 600000 : 300000; // 10 min dev, 5 min prod
       
+      console.log('🔍 Cache check:', {
+        profileType,
+        hasCache: !!eventsCacheRef.current[cacheKey],
+        cacheAge: cacheAge,
+        cacheTimeout,
+        lastFetch: eventsCacheRef.current.lastFetch[cacheKey],
+        shouldFetch: !eventsCacheRef.current[cacheKey] || cacheAge > cacheTimeout,
+      });
+      
       if (!eventsCacheRef.current[cacheKey] || cacheAge > cacheTimeout) {
+        console.log('🔄 Cache miss or stale - fetching fresh data');
         loadEvents();
       } else {
         // Use existing cache
+        console.log('✅ Using cached data');
         setEvents(eventsCacheRef.current[cacheKey]!);
         if (timelineCacheRef.current[cacheKey]) {
+          console.log('✅ Using cached timeline data');
           setEventTimelines(timelineCacheRef.current[cacheKey]!);
+        } else {
+          console.log('⚠️ No cached timeline data found, timeline will be empty');
         }
         setIsLoading(false);
       }
     }
   }, [isTeamMode, currentUser?.uid]); // Keep dependencies but add cache check
+
+  // Authentication state management with token refresh
+  useEffect(() => {
+    let unsubscribe: () => void;
+
+    const setupAuthListener = () => {
+      unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
+        console.log('🔐 AUTH STATE CHANGED:', user?.uid || 'No user');
+        
+        if (user) {
+          try {
+            // Force token refresh to ensure we have valid permissions
+            const token = await user.getIdToken(true); // force refresh = true
+            console.log('🔄 AUTH: Token refreshed successfully');
+            setCurrentUser(user);
+          } catch (error) {
+            console.error('🚨 AUTH: Token refresh failed:', error);
+            setCurrentUser(null);
+          }
+        } else {
+          console.log('👤 AUTH: User signed out or not authenticated');
+          setCurrentUser(null);
+        }
+      });
+    };
+
+    setupAuthListener();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  // Load coaches for contact person dropdown
+  useEffect(() => {
+    const loadCoaches = async () => {
+      try {
+        const coachesData = await getCoaches();
+        setCoaches(coachesData);
+      } catch (error) {
+        console.error('Error loading coaches:', error);
+      }
+    };
+
+    loadCoaches();
+  }, []);
 
   // Removed focus event handler to reduce unnecessary queries
 
@@ -374,15 +522,28 @@ export default function Home() {
 
 
 
-  const closeDetailsModal = () => {
-    setShowDetailsModal(null);
-    setEditingEvent(null);
-  };
 
-  const openEventInfoModal = (event: EventData) => {
+
+  const openEventInfoModal = async (event: EventData) => {
     setSelectedEvent(event);
     setShowEventInfoModal(true);
+    
+    // Load team members for this event to get role assignments
+    try {
+      const logisticsData = await getEventLogistics(event.id);
+      if (logisticsData && logisticsData.teamMembers) {
+        setTeamMembers(logisticsData.teamMembers);
+      } else {
+        // No team members assigned yet, clear the state
+        setTeamMembers([]);
+      }
+    } catch (error) {
+      console.error('Error loading team members for event:', error);
+      setTeamMembers([]);
+    }
   };
+
+
 
   const closeEventInfoModal = () => {
     setShowEventInfoModal(false);
@@ -425,9 +586,19 @@ export default function Home() {
       
       closeEventInfoModal();
       // Event updated successfully
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating event:', error);
-      alert('Failed to update event. Please try again.');
+      
+      // Handle specific error cases
+      if (error.message?.includes('No document to update')) {
+        alert('This event no longer exists. It may have been deleted. Refreshing the page...');
+        window.location.reload();
+      } else if (error.code === 'not-found') {
+        alert('Event not found. It may have been deleted by another user. Refreshing the page...');
+        window.location.reload();
+      } else {
+        alert(`Failed to update event: ${error.message || 'Please try again.'}`);
+      }
     }
   };
 
@@ -449,6 +620,14 @@ export default function Home() {
         [selectedTimelineEventId]: updatedTimeline,
       }));
       
+      // Update cache to keep it in sync
+      const profileType = isTeamMode ? 'team' : 'individual';
+      const cacheKey = profileType as 'team' | 'individual';
+      if (timelineCacheRef.current[cacheKey]) {
+        timelineCacheRef.current[cacheKey]![selectedTimelineEventId] = updatedTimeline;
+        persistTimelineCache();
+      }
+      
       // Persist to Firebase
       await updateEventTimelineItem(selectedTimelineEventId, updatedTimeline);
       
@@ -460,32 +639,180 @@ export default function Home() {
     }
   };
 
-  const handleEventUpdate = async () => {
-    if (!editingEvent) return;
+  const handleTimelineItemStatusUpdate = async (eventId: string, itemId: string, newStatus: 'pending' | 'confirmed' | 'completed') => {
+    try {
+      const timeline = eventTimelines[eventId];
+      if (!timeline) {
+        throw new Error('Timeline not found');
+      }
+      
+      const updatedTimeline = timeline.map(item => 
+        item.id === itemId ? { ...item, status: newStatus } : item
+      );
+      
+      // Update local state
+      setEventTimelines(prev => ({
+        ...prev,
+        [eventId]: updatedTimeline,
+      }));
+      
+      // Update cache to keep it in sync
+      const profileType = isTeamMode ? 'team' : 'individual';
+      const cacheKey = profileType as 'team' | 'individual';
+      if (timelineCacheRef.current[cacheKey]) {
+        timelineCacheRef.current[cacheKey]![eventId] = updatedTimeline;
+        persistTimelineCache();
+      }
+      
+      // Persist to Firebase
+      await updateEventTimelineItem(eventId, updatedTimeline);
+      
+      console.log(`Timeline item ${itemId} status updated to ${newStatus}`);
+    } catch (error) {
+      console.error('Error updating timeline item status:', error);
+      alert('Failed to update timeline item status. Please try again.');
+    }
+  };
+
+
+
+  const handleEventDelete = async () => {
+    if (!selectedEvent) return;
+
+    // Check authentication first
+    if (!currentUser) {
+      alert('Please sign in with Google to delete events. Look for the sign-in button in the top-right corner.');
+      return;
+    }
+
+    console.log('🔐 DELETE: User authenticated:', currentUser.uid, currentUser.email);
+
+    if (!confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
+      return;
+    }
 
     try {
-      await updateEvent(editingEvent.id, editingEvent);
+      // Refresh auth token before critical operations
+      console.log('🔄 Refreshing auth token before delete...');
+      await currentUser.getIdToken(true); // Force refresh
       
-      // Update local state instead of refetching from Firebase
-      setEvents(prevEvents => 
-        prevEvents.map(event => 
-          event.id === editingEvent.id ? { ...editingEvent, profileType: event.profileType } as MultiProfileEventData : event
-        )
-      );
+      const profileType = isTeamMode ? 'team' : 'individual';
+      console.log('🗑️ DELETE: Starting delete for event:', selectedEvent.id, 'profileType:', profileType);
+      
+      await deleteEvent(selectedEvent.id, profileType);
+      
+      // Update local state
+      setEvents(prevEvents => prevEvents.filter(event => event.id !== selectedEvent.id));
+      
+      // Remove timeline items for this event from local state
+      setEventTimelines(prevTimelines => {
+        const updatedTimelines = { ...prevTimelines };
+        delete updatedTimelines[selectedEvent.id];
+        return updatedTimelines;
+      });
+      
+      // Update cache in memory
+      const cacheKey = profileType as 'team' | 'individual';
+      if (eventsCacheRef.current[cacheKey]) {
+        eventsCacheRef.current[cacheKey] = eventsCacheRef.current[cacheKey]!.filter(event => event.id !== selectedEvent.id);
+      }
+      
+      // Clear timeline cache for this specific event
+      if (timelineCacheRef.current[cacheKey]) {
+        delete timelineCacheRef.current[cacheKey]![selectedEvent.id];
+      }
+      
+      // Clear ALL localStorage cache keys (both old and new systems)
+      const localStorageKey = `eventflow-events-${cacheKey}`;
+      const lastFetchKey = `eventflow-events-fetch-${cacheKey}`;
+      const timelineKey = `eventflow-timeline-${cacheKey}`;
+      const timelineFetchKey = `eventflow-timeline-fetch-${cacheKey}`;
+      
+      // Clear profile-specific keys
+      localStorage.removeItem(localStorageKey);
+      localStorage.removeItem(lastFetchKey);
+      localStorage.removeItem(timelineKey);
+      localStorage.removeItem(timelineFetchKey);
+      
+      // Clear old system keys (used by initializeEventsCache)
+      localStorage.removeItem('eventflow-events-cache');
+      localStorage.removeItem('eventflow-events-lastfetch');
+      localStorage.removeItem('eventflow-timeline-cache');
+      localStorage.removeItem('eventflow-timeline-lastfetch');
+      
+      // Clear in-memory caches too
+      eventsCacheRef.current[cacheKey] = [];
+      timelineCacheRef.current[cacheKey] = {};
+      
+      console.log('🧹 CACHE: Completely cleared ALL cache systems for:', cacheKey);
+      
+      console.log('✅ DELETE: Event successfully deleted and removed from UI');
+      closeEventInfoModal();
+    } catch (error: any) {
+      console.error('🚨 DELETE ERROR:', error);
+      
+      // Handle specific auth errors
+      if (error.code === 'auth/token-expired' || error.message?.includes('token')) {
+        alert('Your session has expired. Please refresh the page and try again.');
+      } else {
+        alert(`Failed to delete event: ${error.message || 'Please try again.'}`);
+      }
+    }
+  };
+
+  const handleTimelineItemDelete = async () => {
+    if (!selectedTimelineItem || !selectedTimelineEventId) return;
+
+    if (!confirm('Are you sure you want to delete this timeline task? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      // Get current timeline items for this event
+      const currentTimeline = eventTimelines[selectedTimelineEventId] || [];
+      const updatedTimeline = currentTimeline.filter(item => item.id !== selectedTimelineItem.id);
+      
+      // Update Firebase
+      await updateEventTimelineItem(selectedTimelineEventId, updatedTimeline);
+      
+      // Update local state
+      setEventTimelines(prev => ({
+        ...prev,
+        [selectedTimelineEventId]: updatedTimeline,
+      }));
       
       // Update cache
       const profileType = isTeamMode ? 'team' : 'individual';
       const cacheKey = profileType as 'team' | 'individual';
-      if (eventsCacheRef.current[cacheKey]) {
-        eventsCacheRef.current[cacheKey] = eventsCacheRef.current[cacheKey]!.map(event => 
-          event.id === editingEvent.id ? { ...editingEvent, profileType: event.profileType } as MultiProfileEventData : event
-        );
+      if (timelineCacheRef.current[cacheKey]) {
+        timelineCacheRef.current[cacheKey]![selectedTimelineEventId] = updatedTimeline;
+        persistTimelineCache();
       }
       
-      closeDetailsModal();
+      // Clear ALL localStorage cache to ensure consistency
+      const localStorageKey = `eventflow-events-${cacheKey}`;
+      const lastFetchKey = `eventflow-events-fetch-${cacheKey}`;
+      const timelineKey = `eventflow-timeline-${cacheKey}`;
+      const timelineFetchKey = `eventflow-timeline-fetch-${cacheKey}`;
+      
+      // Clear profile-specific keys
+      localStorage.removeItem(localStorageKey);
+      localStorage.removeItem(lastFetchKey);
+      localStorage.removeItem(timelineKey);
+      localStorage.removeItem(timelineFetchKey);
+      
+      // Clear old system keys
+      localStorage.removeItem('eventflow-events-cache');
+      localStorage.removeItem('eventflow-events-lastfetch');
+      localStorage.removeItem('eventflow-timeline-cache');
+      localStorage.removeItem('eventflow-timeline-lastfetch');
+      
+      console.log('🧹 CACHE: Cleared ALL cache systems for timeline deletion');
+      
+      closeTimelineItemModal();
     } catch (error) {
-      console.error('Error updating event:', error);
-      alert('Failed to update event. Please try again.');
+      console.error('Error deleting timeline item:', error);
+      alert('Failed to delete timeline task. Please try again.');
     }
   };
 
@@ -572,8 +899,9 @@ export default function Home() {
   }, []);
 
   const handleOpenDetailsModal = useMemo(() => (event: EventData) => {
-    setShowDetailsModal(event.id);
-    setEditingEvent(event);
+    setSelectedEvent(event);
+    setShowEventInfoModal(true);
+    setSidebarCollapsed(false); // Expand sidebar when event is clicked
   }, []);
 
   const handleTimelineItemClick = useMemo(() => (eventId: string, item: TimelineItem) => {
@@ -707,30 +1035,19 @@ export default function Home() {
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="flex">
-          {/* Header content aligned with sidebar */}
-          <div className="w-[225px] flex-shrink-0 hidden lg:block"></div>
-          <div className="flex-1 pr-4 sm:pr-6 lg:pr-8">
-            <div className="grid grid-cols-3 items-center py-6">
-              {/* Left side - empty */}
-              <div></div>
+          <div className="flex-1 pr-[14px] sm:pr-[14px] lg:pr-[14px]">
+            <div className="flex items-center justify-between py-2 sm:py-3">
+              {/* Left side - Empty (hamburger moved to sidebar) */}
+              <div className="flex-shrink-0 pl-[14px] sm:pl-[14px] lg:pl-[14px]">
+              </div>
               
-              {/* Center - EventFlow title */}
-              <div className="flex justify-center">
-                <div className="flex items-center space-x-2">
-                  <div className="p-2 bg-gradient-to-r from-primary-600 to-indigo-600 rounded-lg">
-                    <Calendar className="h-6 w-6 text-white" />
-                  </div>
-                  <div>
-                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EventFlow</h1>
-                    <p className="text-sm text-gray-500">
-                      {isTeamMode ? 'Team Dashboard' : 'Individual Dashboard'}
-                    </p>
-                  </div>
-                </div>
+              {/* Left - EventFlow title */}
+              <div className="flex-1 flex justify-start">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EventFlow</h1>
               </div>
               
               {/* Right side - User Profile */}
-              <div className="flex justify-end">
+              <div className="flex-shrink-0">
                 <UserProfile 
                   onUserChange={handleUserChange}
                   onTeamModeChange={handleTeamModeChange}
@@ -742,9 +1059,9 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="flex h-[calc(100vh-88px)] overflow-hidden">
+      <main className="flex h-[calc(100vh-68px)] overflow-hidden">
         {/* Sidebar */}
-        <div className={`flex-shrink-0 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'w-[60px]' : 'w-[225px]'}`}>
+        <div className="flex-shrink-0 h-full">
           <EventSidebar
             events={filteredEvents}
             isLoading={isLoading}
@@ -756,24 +1073,33 @@ export default function Home() {
             onToggleEventGroup={handleToggleEventGroup}
             onOpenDetailsModal={handleOpenDetailsModal}
             onTimelineItemClick={handleTimelineItemClick}
+            onTimelineItemStatusUpdate={handleTimelineItemStatusUpdate}
             onToggleCollapsed={handleToggleCollapsed}
+            isTeamMode={isTeamMode}
           />
         </div>
 
         {/* Calendar/Timeline - Main Content */}
-        <div className={`flex-1 overflow-hidden relative transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'ml-[60px]' : 'ml-[280px]'}`}>
+        <div className="flex-1 overflow-hidden relative transition-all duration-300 ease-in-out">
           <div className="bg-white shadow-sm h-full w-full">
-            <div className="pr-4 sm:pr-6 lg:pr-8 py-2.5 border-b pl-4 sm:pl-6 lg:pl-8">
+            
+            {/* Floating Action Button (FAB) */}
+            <div className="fixed bottom-6 right-6 z-40">
+              <Link
+                href="/event-setup"
+                className={`flex items-center justify-center w-14 h-14 text-white rounded-full shadow-lg transition-all duration-200 hover:scale-110 ${
+                  isTeamMode 
+                    ? 'bg-primary-600 hover:bg-primary-700' 
+                    : 'bg-[#F59E0B] hover:bg-[#D97706]'
+                }`}
+                title="Create Event"
+              >
+                <Plus className="h-6 w-6" />
+              </Link>
+            </div>
+            <div className="pr-4 sm:pr-6 lg:pr-8 py-[9px] border-b pl-4 sm:pl-6 lg:pl-8">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  {/* Event/Calendar Icon */}
-                  <div className="flex items-center">
-                    {viewMode === 'calendar' ? (
-                      <Calendar className="h-6 w-6 text-primary-600" />
-                    ) : (
-                      <BarChart3 className="h-6 w-6 text-primary-600" />
-                    )}
-                  </div>
                     
                   {/* Month Navigation */}
                   {viewMode === 'calendar' && (
@@ -823,7 +1149,7 @@ export default function Home() {
                   <div className="flex bg-gray-100 rounded-lg p-1">
                     <button
                       onClick={() => setViewMode('calendar')}
-                      className={`flex items-center space-x-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      className={`flex items-center space-x-2 px-2 sm:px-3 py-1 rounded-md text-sm font-medium transition-colors ${
                         viewMode === 'calendar'
                           ? 'bg-white text-gray-900 shadow-sm'
                           : 'text-gray-600 hover:text-gray-900'
@@ -834,7 +1160,7 @@ export default function Home() {
                     </button>
                     <button
                       onClick={() => setViewMode('gantt')}
-                      className={`flex items-center space-x-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      className={`flex items-center space-x-2 px-2 sm:px-3 py-1 rounded-md text-sm font-medium transition-colors ${
                         viewMode === 'gantt'
                           ? 'bg-white text-gray-900 shadow-sm'
                           : 'text-gray-600 hover:text-gray-900'
@@ -927,6 +1253,14 @@ export default function Home() {
                                 ...prev,
                                 [eventId]: updatedTimeline,
                               }));
+                              
+                              // Update cache to keep it in sync
+                              const profileType = isTeamMode ? 'team' : 'individual';
+                              const cacheKey = profileType as 'team' | 'individual';
+                              if (timelineCacheRef.current[cacheKey]) {
+                                timelineCacheRef.current[cacheKey]![eventId] = updatedTimeline;
+                                persistTimelineCache();
+                              }
                                 
                               // Persist to Firebase
                               await updateEventTimelineItem(eventId, updatedTimeline);
@@ -1058,16 +1392,7 @@ export default function Home() {
                                   }
                                 }
                               }}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                // For regular events, open logistics page
-                                if (!(event as CalendarEvent).isTimelineItem) {
-                                  const actualEvent = events.find(e => e.id === event.id);
-                                  if (actualEvent) {
-                                    window.open(`/logistics?eventId=${actualEvent.id}`, '_blank');
-                                  }
-                                }
-                              }}
+
                             >
                               <div className="font-medium truncate">
                                 {event.name}
@@ -1248,319 +1573,64 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Details Modal */}
-      {showDetailsModal && editingEvent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-          >
-            <div className="p-6 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Event Details</h3>
-                <button
-                  onClick={closeDetailsModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
 
-            <div className="p-6 space-y-6">
-              {/* Basic Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Event Name</label>
-                  <input
-                    type="text"
-                    value={editingEvent.name}
-                    onChange={(e) => setEditingEvent({ ...editingEvent, name: e.target.value })}
-                    className="form-input w-full"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
-                  <input
-                    type="text"
-                    value={editingEvent.eventType || ''}
-                    onChange={(e) => setEditingEvent({ ...editingEvent, eventType: e.target.value })}
-                    className="form-input w-full"
-                    placeholder="e.g., Workshop, Pop-up Class"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Event Color</label>
-                  <div className="flex items-center space-x-2">
-                    <div 
-                      className="w-8 h-8 rounded-full border-2 border-gray-300 cursor-pointer"
-                      style={{ backgroundColor: editingEvent.color || '#10B981' }}
-                      onClick={() => {
-                        const colors = [
-                          '#10B981', // Green (default)
-                          '#3B82F6', // Blue
-                          '#F59E0B', // Amber
-                          '#EF4444', // Red
-                          '#8B5CF6', // Purple
-                          '#EC4899', // Pink
-                          '#06B6D4', // Cyan
-                          '#84CC16', // Lime
-                          '#F97316', // Orange
-                          '#6B7280', // Gray
-                        ];
-                        const currentIndex = colors.indexOf(editingEvent.color || '#10B981');
-                        const nextIndex = (currentIndex + 1) % colors.length;
-                        setEditingEvent({ ...editingEvent, color: colors[nextIndex] });
-                      }}
-                      title="Click to cycle through colors"
-                    />
-                    <span className="text-sm text-gray-600">
-                      {editingEvent.color || '#10B981'}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={editingEvent.date}
-                    onChange={(e) => setEditingEvent({ ...editingEvent, date: e.target.value })}
-                    className="form-input w-full"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
-                  <input
-                    type="time"
-                    value={editingEvent.time}
-                    onChange={(e) => setEditingEvent({ ...editingEvent, time: e.target.value })}
-                    className="form-input w-full"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                  <input
-                    type="time"
-                    value={editingEvent.eventEndTime || ''}
-                    onChange={(e) => setEditingEvent({ ...editingEvent, eventEndTime: e.target.value })}
-                    className="form-input w-full"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                  <input
-                    type="text"
-                    value={editingEvent.location}
-                    onChange={(e) => setEditingEvent({ ...editingEvent, location: e.target.value })}
-                    className="form-input w-full"
-                  />
-                </div>
-              </div>
 
-              {/* Contact Information */}
-              <div>
-                <h4 className="text-md font-medium text-gray-900 mb-3">Point of Contact</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                    <input
-                      type="text"
-                      value={editingEvent.pointOfContact.name}
-                      onChange={(e) => setEditingEvent({
-                        ...editingEvent,
-                        pointOfContact: { ...editingEvent.pointOfContact, name: e.target.value },
-                      })}
-                      className="form-input w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={editingEvent.pointOfContact.email}
-                      onChange={(e) => setEditingEvent({
-                        ...editingEvent,
-                        pointOfContact: { ...editingEvent.pointOfContact, email: e.target.value },
-                      })}
-                      className="form-input w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                    <input
-                      type="tel"
-                      value={editingEvent.pointOfContact.phone || ''}
-                      onChange={(e) => setEditingEvent({
-                        ...editingEvent,
-                        pointOfContact: { ...editingEvent.pointOfContact, phone: e.target.value },
-                      })}
-                      className="form-input w-full"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Event Details */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Event Purpose</label>
-                <textarea
-                  value={editingEvent.eventPurpose}
-                  onChange={(e) => setEditingEvent({ ...editingEvent, eventPurpose: e.target.value })}
-                  className="form-input w-full h-20"
-                  placeholder="Describe the purpose and goals of this event..."
-                />
-              </div>
-
-              {/* Marketing Channels */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Marketing Channels</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {['media', 'flyers', 'email', 'showy'].map((channel) => (
-                    <label key={channel} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={editingEvent.marketingChannels.includes(channel)}
-                        onChange={(e) => {
-                          const newChannels = e.target.checked
-                            ? [...editingEvent.marketingChannels, channel]
-                            : editingEvent.marketingChannels.filter(c => c !== channel);
-                          setEditingEvent({ ...editingEvent, marketingChannels: newChannels });
-                        }}
-                        className="mr-2"
-                      />
-                      <span className="text-sm text-gray-700 capitalize">{channel}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* GEMS Ticket */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">GEMS Ticket</label>
-                <div className="flex items-center space-x-4">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="ticketingNeeds"
-                      value="yes"
-                      checked={editingEvent.ticketingNeeds === 'yes'}
-                      onChange={(e) => setEditingEvent({ ...editingEvent, ticketingNeeds: e.target.value })}
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-gray-700">Yes</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="ticketingNeeds"
-                      value="no"
-                      checked={editingEvent.ticketingNeeds === 'no'}
-                      onChange={(e) => setEditingEvent({ ...editingEvent, ticketingNeeds: e.target.value })}
-                      className="mr-2"
-                    />
-                    <span className="text-sm text-gray-700">No</span>
-                  </label>
-                </div>
-                {editingEvent.ticketingNeeds === 'yes' && (
-                  <div className="mt-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">GEMS Details</label>
-                    <textarea
-                      value={editingEvent.gemsDetails || ''}
-                      onChange={(e) => setEditingEvent({ ...editingEvent, gemsDetails: e.target.value })}
-                      className="form-input w-full h-20"
-                      placeholder="# of Chairs:&#10;# of Tables:&#10;# of Table Cloths:&#10;Additional requirements:"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Special Requirements */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Special Requirements</label>
-                <textarea
-                  value={editingEvent.specialRequirements || ''}
-                  onChange={(e) => setEditingEvent({ ...editingEvent, specialRequirements: e.target.value })}
-                  className="form-input w-full h-20"
-                  placeholder="Any special requirements, equipment, or accommodations needed..."
-                />
-              </div>
-
-              {/* Other Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Other Notes</label>
-                <textarea
-                  value={editingEvent.otherNotes || ''}
-                  onChange={(e) => setEditingEvent({ ...editingEvent, otherNotes: e.target.value })}
-                  className="form-input w-full h-20"
-                  placeholder="Additional notes or comments..."
-                />
-              </div>
-            </div>
-
-            <div className="p-6 border-t bg-gray-50 flex justify-end space-x-3">
-              <button
-                onClick={closeDetailsModal}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEventUpdate}
-                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
-              >
-                Save
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
 
       {/* Event Info Modal */}
       {showEventInfoModal && selectedEvent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-8">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
+            className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto m-4"
           >
-            <div className="p-4 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Event Information</h3>
-                <button
-                  onClick={closeEventInfoModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
+            <ModalHeader
+              title="🎯 Edit Event Details"
+              subtitle="Modify event information and settings"
+              eventId={selectedEvent.id}
+              onDelete={handleEventDelete}
+              onSave={handleSelectedEventUpdate}
+              onClose={closeEventInfoModal}
+            />
 
-            <div className="p-4 space-y-4">
-              {/* Calendar Event Details */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                <h4 className="text-sm font-medium text-blue-900 mb-2">📅 Calendar Event Details</h4>
-                <p className="text-xs text-blue-700">Edit these details to update your event</p>
-              </div>
+            <div className="p-8 space-y-8">
 
-              {/* Basic Calendar Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+              {/* Event Title and Color */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Event Title</label>
                   <input
                     type="text"
                     value={selectedEvent.name}
                     onChange={(e) => setSelectedEvent({ ...selectedEvent, name: e.target.value })}
-                    className="form-input w-full"
-                    placeholder="Event title for calendar"
+                    className="form-input w-full text-lg font-semibold"
+                    placeholder="Event title..."
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event Color</label>
+                  <div className="flex space-x-2">
+                    {EVENT_COLORS.map((color) => (
+                      <button
+                        key={color.value}
+                        type="button"
+                        onClick={() => setSelectedEvent({ ...selectedEvent, color: color.value })}
+                        className={`w-8 h-8 rounded-full border-2 transition-all ${
+                          selectedEvent.color === color.value
+                            ? 'border-gray-800 scale-110'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                        style={{ backgroundColor: color.value }}
+                        title={color.label}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Date and Time Information */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                   <input
@@ -1588,7 +1658,74 @@ export default function Home() {
                     className="form-input w-full"
                   />
                 </div>
-                <div className="md:col-span-2">
+              </div>
+
+              {/* Event Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Event Description</label>
+                <textarea
+                  value={selectedEvent.eventPurpose}
+                  onChange={(e) => setSelectedEvent({ ...selectedEvent, eventPurpose: e.target.value })}
+                  className="form-input w-full h-24"
+                  placeholder="Event description..."
+                  rows={3}
+                />
+              </div>
+
+              {/* Contact Person and Location */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Contact Person
+                    {(() => {
+                      const suggestedContact = getEventContactPerson(teamMembers);
+                      return suggestedContact && !selectedEvent.pointOfContact.name ? (
+                        <span className="text-xs text-blue-600 ml-1">(Suggested: {suggestedContact.name})</span>
+                      ) : null;
+                    })()}
+                  </label>
+                  <select
+                    value={selectedEvent.pointOfContact.name}
+                    onChange={(e) => {
+                      const selectedCoach = coaches.find(coach => coach.name === e.target.value);
+                      if (selectedCoach) {
+                        setSelectedEvent({
+                          ...selectedEvent,
+                          pointOfContact: {
+                            name: selectedCoach.name,
+                            email: selectedCoach.email,
+                            phone: selectedCoach.phone,
+                          },
+                        });
+                      }
+                    }}
+                    className="form-input w-full"
+                  >
+                    <option value="">Select a contact person</option>
+                    {(() => {
+                      const eventLead = getEventContactPerson(teamMembers);
+                      const otherCoaches = coaches.filter(coach => 
+                        !eventLead || coach.name !== eventLead.name
+                      );
+                      
+                      return (
+                        <>
+                          {eventLead && (
+                            <option key={`event-lead-${eventLead.name}`} value={eventLead.name}>
+                              {eventLead.name} (Event Lead - Default)
+                            </option>
+                          )}
+                          {otherCoaches.map((coach) => (
+                            <option key={coach.id} value={coach.name}>
+                              {coach.name}
+                            </option>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
                   <input
                     type="text"
@@ -1600,89 +1737,131 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Event Description */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Event Description</label>
-                <textarea
-                  value={selectedEvent.eventPurpose}
-                  onChange={(e) => setSelectedEvent({ ...selectedEvent, eventPurpose: e.target.value })}
-                  className="form-input w-full h-24"
-                  placeholder="Description that will appear in the calendar event..."
-                />
-              </div>
-
-              {/* Contact Information for Calendar */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Name</label>
-                    <input
-                      type="text"
-                      value={selectedEvent.pointOfContact.name}
-                      onChange={(e) => setSelectedEvent({
-                        ...selectedEvent,
-                        pointOfContact: { ...selectedEvent.pointOfContact, name: e.target.value },
-                      })}
-                      className="form-input w-full"
-                      placeholder="Contact name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={selectedEvent.pointOfContact.email}
-                      onChange={(e) => setSelectedEvent({
-                        ...selectedEvent,
-                        pointOfContact: { ...selectedEvent.pointOfContact, email: e.target.value },
-                      })}
-                      className="form-input w-full"
-                      placeholder="Contact email"
-                    />
-                  </div>
+              {/* Event Type & Scope */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
+                  <select
+                    value={selectedEvent.eventType}
+                    onChange={(e) => setSelectedEvent({ ...selectedEvent, eventType: e.target.value })}
+                    className="form-input w-full"
+                  >
+                    <option value="">Select event type</option>
+                    {EVENT_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event Scope</label>
+                  <select
+                    value={selectedEvent.eventScope}
+                    onChange={(e) => setSelectedEvent({ ...selectedEvent, eventScope: e.target.value as 'team' | 'individual' })}
+                    className="form-input w-full"
+                  >
+                    {EVENT_SCOPES.map((scope) => (
+                      <option key={scope.value} value={scope.value}>
+                        {scope.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              {/* Additional Notes */}
+              {/* Marketing Channels & GEMS Ticket */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">Marketing Channels</label>
+                  <div className="space-y-3">
+                    {MARKETING_CHANNELS.map((channel) => (
+                      <label key={channel.id} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedEvent.marketingChannels.includes(channel.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedEvent({
+                                ...selectedEvent,
+                                marketingChannels: [...selectedEvent.marketingChannels, channel.id],
+                              });
+                            } else {
+                              setSelectedEvent({
+                                ...selectedEvent,
+                                marketingChannels: selectedEvent.marketingChannels.filter(c => c !== channel.id),
+                              });
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{channel.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">GEMS Ticket Needed?</label>
+                  <div className="space-y-3">
+                    {TICKETING_OPTIONS.map((option) => (
+                      <label key={option.value} className="flex items-center space-x-2">
+                        <input
+                          type="radio"
+                          name="ticketingNeeds"
+                          value={option.value}
+                          checked={selectedEvent.ticketingNeeds === option.value}
+                          onChange={(e) => setSelectedEvent({ ...selectedEvent, ticketingNeeds: e.target.value })}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  
+                  {selectedEvent.ticketingNeeds === 'yes' && (
+                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">GEMS Ticket Details</label>
+                      <textarea
+                        value={selectedEvent.gemsDetails || DEFAULT_GEMS_DETAILS}
+                        onChange={(e) => setSelectedEvent({ ...selectedEvent, gemsDetails: e.target.value })}
+                        className="form-input w-full h-24"
+                        placeholder="Specify quantities needed..."
+                        rows={4}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+
+
+
+
+
+
+
+
+              {/* Special Requirements */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Special Requirements</label>
                 <textarea
                   value={selectedEvent.specialRequirements || ''}
                   onChange={(e) => setSelectedEvent({ ...selectedEvent, specialRequirements: e.target.value })}
                   className="form-input w-full h-20"
-                  placeholder="Any additional notes for the calendar event..."
+                  placeholder="Special requirements for this event..."
                 />
               </div>
-            </div>
 
-            <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                Make your changes, then save to update your event
-              </div>
-              <div className="flex space-x-3">
-                <Link
-                  href={`/logistics?eventId=${selectedEvent.id}`}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                  <span>View Logistics</span>
-                </Link>
-                <button
-                  onClick={closeEventInfoModal}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSelectedEventUpdate}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
-                >
-                  Save
-                </button>
-
+              {/* Other Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Other Notes</label>
+                <textarea
+                  value={selectedEvent.otherNotes || ''}
+                  onChange={(e) => setSelectedEvent({ ...selectedEvent, otherNotes: e.target.value })}
+                  className="form-input w-full h-20"
+                  placeholder="Additional notes and comments..."
+                />
               </div>
             </div>
           </motion.div>
@@ -1691,43 +1870,35 @@ export default function Home() {
 
       {/* Timeline Item Modal */}
       {showTimelineItemModal && selectedTimelineItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-8">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
+            className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto m-4"
           >
-            <div className="p-4 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Edit Timeline Task</h3>
-                <button
-                  onClick={closeTimelineItemModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
+            <ModalHeader
+              title="📋 Timeline Task Details"
+              subtitle="Edit this individual timeline task"
+              eventId={selectedTimelineEventId}
+              onDelete={handleTimelineItemDelete}
+              onSave={handleTimelineItemUpdate}
+              onClose={closeTimelineItemModal}
+              deleteLabel="Delete"
+              deleteTitle="Delete Task"
+            />
 
-            <div className="p-4 space-y-4">
-              {/* Task Details */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
-                <h4 className="text-sm font-medium text-green-900 mb-2">📋 Timeline Task Details</h4>
-                <p className="text-xs text-green-700">Edit this individual timeline task</p>
-              </div>
+            <div className="p-8 space-y-8">
 
-              {/* Basic Task Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Task Title and Category */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Task Title</label>
                   <input
                     type="text"
                     value={selectedTimelineItem.title}
                     onChange={(e) => setSelectedTimelineItem({ ...selectedTimelineItem, title: e.target.value })}
-                    className="form-input w-full"
+                    className="form-input w-full text-lg font-semibold"
                     placeholder="Task title"
                   />
                 </div>
@@ -1738,12 +1909,17 @@ export default function Home() {
                     onChange={(e) => setSelectedTimelineItem({ ...selectedTimelineItem, category: e.target.value as any })}
                     className="form-input w-full"
                   >
-                    <option value="marketing">Marketing</option>
-                    <option value="logistics">Logistics</option>
-                    <option value="preparation">Preparation</option>
-                    <option value="execution">Execution</option>
+                    {TASK_CATEGORIES.map((category) => (
+                      <option key={category.value} value={category.value}>
+                        {category.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Due Date and Time */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
                   <input
@@ -1762,30 +1938,6 @@ export default function Home() {
                     className="form-input w-full"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                  <select
-                    value={selectedTimelineItem.priority}
-                    onChange={(e) => setSelectedTimelineItem({ ...selectedTimelineItem, priority: e.target.value as any })}
-                    className="form-input w-full"
-                  >
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select
-                    value={selectedTimelineItem.status}
-                    onChange={(e) => setSelectedTimelineItem({ ...selectedTimelineItem, status: e.target.value as any })}
-                    className="form-input w-full"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </div>
               </div>
 
               {/* Task Description */}
@@ -1799,16 +1951,77 @@ export default function Home() {
                 />
               </div>
 
+              {/* Priority and Status */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <select
+                    value={selectedTimelineItem.priority}
+                    onChange={(e) => setSelectedTimelineItem({ ...selectedTimelineItem, priority: e.target.value as any })}
+                    className="form-input w-full"
+                  >
+                    {TASK_PRIORITIES.map((priority) => (
+                      <option key={priority.value} value={priority.value}>
+                        {priority.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={selectedTimelineItem.status}
+                    onChange={(e) => setSelectedTimelineItem({ ...selectedTimelineItem, status: e.target.value as any })}
+                    className="form-input w-full"
+                  >
+                    {TASK_STATUSES.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {/* Assigned To */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Assigned To
+                  {(() => {
+                    const suggestedAssignee = getSuggestedAssignee(teamMembers, selectedTimelineItem.category || '');
+                    return suggestedAssignee && !selectedTimelineItem.assignedTo ? (
+                      <span className="text-xs text-blue-600 ml-1">(Suggested: {suggestedAssignee.name})</span>
+                    ) : null;
+                  })()}
+                </label>
+                <select
                   value={selectedTimelineItem.assignedTo || ''}
                   onChange={(e) => setSelectedTimelineItem({ ...selectedTimelineItem, assignedTo: e.target.value })}
                   className="form-input w-full"
-                  placeholder="Who is responsible for this task?"
-                />
+                >
+                  <option value="">Select who is responsible for this task</option>
+                  {(() => {
+                    const suggestedAssignee = getSuggestedAssignee(teamMembers, selectedTimelineItem.category || '');
+                    const otherCoaches = coaches.filter(coach => 
+                      !suggestedAssignee || coach.name !== suggestedAssignee.name
+                    );
+                    
+                    return (
+                      <>
+                        {suggestedAssignee && (
+                          <option key={`suggested-${suggestedAssignee.name}`} value={suggestedAssignee.name}>
+                            {suggestedAssignee.name} (Suggested for {selectedTimelineItem.category || 'this task'})
+                          </option>
+                        )}
+                        {otherCoaches.map((coach) => (
+                          <option key={coach.id} value={coach.name}>
+                            {coach.name}
+                          </option>
+                        ))}
+                      </>
+                    );
+                  })()}
+                </select>
               </div>
 
               {/* Notes */}
@@ -1823,25 +2036,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                Edit this timeline task and save your changes
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={closeTimelineItemModal}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleTimelineItemUpdate}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
+
           </motion.div>
         </div>
       )}

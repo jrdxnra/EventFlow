@@ -37,8 +37,9 @@ interface EventSidebarProps {
   onToggleEventGroup: (eventId: string) => void
   onOpenDetailsModal: (event: EventData) => void
   onTimelineItemClick: (eventId: string, item: TimelineItem) => void
-
+  onTimelineItemStatusUpdate: (eventId: string, itemId: string, newStatus: 'pending' | 'confirmed' | 'completed') => void
   onToggleCollapsed: () => void
+  isTeamMode: boolean
 }
 
 const EventSidebar = React.memo(function EventSidebar({
@@ -52,9 +53,11 @@ const EventSidebar = React.memo(function EventSidebar({
   onToggleEventGroup,
   onOpenDetailsModal,
   onTimelineItemClick,
-
+  onTimelineItemStatusUpdate,
   onToggleCollapsed,
+  isTeamMode,
 }: EventSidebarProps) {
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   const formatDate = (date: Date) => {
     const today = new Date();
@@ -77,10 +80,8 @@ const EventSidebar = React.memo(function EventSidebar({
 
 
   const EventCard = ({ event }: { event: EventData }) => (
-    <motion.div
+    <div
       key={event.id}
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
       className="border rounded-lg overflow-hidden mb-3"
       style={{
         backgroundColor: event.color ? `${event.color}15` : '#f8f9fa',
@@ -142,7 +143,7 @@ const EventSidebar = React.memo(function EventSidebar({
                       return <span className="text-blue-600">{diffDays} days</span>;
                     } else {
                       const diffWeeks = Math.ceil(diffDays / 7);
-                      return <span className="text-gray-600">{diffWeeks} week{diffWeeks > 1 ? 's' : ''}</span>;
+                      return <span className="text-gray-600">{diffWeeks}w</span>;
                     }
                   })()}
                 </div>
@@ -163,15 +164,7 @@ const EventSidebar = React.memo(function EventSidebar({
             <div className="flex items-center justify-between">
               <p className="text-xs text-gray-500 truncate">{event.location}</p>
               <div className="flex items-center space-x-1">
-                <Link
-                  href={`/logistics?eventId=${event.id}`}
-                  className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-                  title="View logistics"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </Link>
+
                 <button
                   onClick={() => onToggleTimeline(event.id)}
                   className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
@@ -188,17 +181,15 @@ const EventSidebar = React.memo(function EventSidebar({
           </div>
 
           {/* Timeline Tasks */}
-          {expandedTimelines.has(event.id) && eventTimelines[event.id] && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="border-t p-1 space-y-0.5"
-              style={{
-                backgroundColor: event.color ? `${event.color}05` : '#f9fafb',
-              }}
-            >
+          <div
+            className={`border-t overflow-hidden transition-all duration-300 ease-in-out ${
+              expandedTimelines.has(event.id) ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+            }`}
+            style={{
+              backgroundColor: event.color ? `${event.color}05` : '#f9fafb',
+            }}
+          >
+            <div className="p-1 space-y-0.5">
               {eventTimelines[event.id]?.map((item) => (
                 <div 
                   key={item.id} 
@@ -217,33 +208,75 @@ const EventSidebar = React.memo(function EventSidebar({
                         {item.dueDate} at {item.dueTime}
                       </p>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTimelineItemClick(event.id, item);
-                      }}
-                      className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                      title="Edit timeline item"
-                    >
-                      <div
-                        className="w-3 h-3 rounded-full shadow-sm"
-                        style={{
-                          backgroundColor: event.color || '#10B981',
+                    <div className="flex items-center space-x-2">
+                      {/* Confirm Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const newStatus = item.status === 'confirmed' ? 'completed' : 'confirmed';
+                          onTimelineItemStatusUpdate(event.id, item.id, newStatus);
                         }}
-                      />
-                    </button>
+                        className={`px-2 py-1 text-xs rounded transition-colors ${
+                          item.status === 'confirmed' || item.status === 'completed'
+                            ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                            : 'bg-red-300 text-red-800 hover:bg-red-400'
+                        }`}
+                        title={
+                          item.status === 'completed' ? 'Completed' : 
+                          item.status === 'confirmed' ? 'Confirmed - Click to mark completed' : 
+                          'Add to calendar'
+                        }
+                      >
+                        {item.status === 'completed' ? (
+                          <span className="flex items-center">
+                            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                            Done
+                          </span>
+                        ) : item.status === 'confirmed' ? (
+                          <span className="flex items-center">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </span>
+                        ) : (
+                          <span className="flex items-center">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                          </span>
+                        )}
+                      </button>
+                      {/* Detail Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTimelineItemClick(event.id, item);
+                        }}
+                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                        title="Edit timeline item"
+                      >
+                        <div
+                          className="w-3 h-3 rounded-full shadow-sm"
+                          style={{
+                            backgroundColor: event.color || '#10B981',
+                          }}
+                        />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
-            </motion.div>
-          )}
+            </div>
+          </div>
         </>
       )}
-    </motion.div>
+    </div>
   );
 
   return (
-    <div className="w-full relative">
+    <div className="w-full h-full relative">
       <Sidebar
         collapsed={collapsed}
         collapsedWidth="60px"
@@ -256,6 +289,8 @@ const EventSidebar = React.memo(function EventSidebar({
             backgroundColor: '#ffffff',
             borderRight: '1px solid #e5e7eb',
             height: '100%',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
           },
           '.ps-menu-button': {
             backgroundColor: 'transparent',
@@ -263,25 +298,27 @@ const EventSidebar = React.memo(function EventSidebar({
           '.ps-menu-button:hover': {
             backgroundColor: '#f3f4f6',
           },
+          // Completely disable hover expansion
+          '&:hover': {
+            width: collapsed ? '60px' : '280px',
+          },
+          // Hide scrollbar completely
+          '.ps-sidebar-container::-webkit-scrollbar': {
+            display: 'none',
+          },
+          // Also hide scrollbar on the content div
+          '.flex-1::-webkit-scrollbar': {
+            display: 'none',
+          },
         }}
       >
         <div className="h-full flex flex-col">
-          {/* Header */}
-          <div className="p-4 border-b flex items-center justify-between">
-            {!collapsed && (
-              <h3 className="text-lg font-semibold text-gray-900">Upcoming Events</h3>
-            )}
-            <button
-              onClick={onToggleCollapsed}
-              className="p-1 hover:bg-gray-100 rounded transition-colors"
-              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-          </div>
-
           {/* Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div 
+            ref={scrollContainerRef}
+            className="flex-1 overflow-y-auto" 
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
             <ProMenu
               menuItemStyles={{
                 button: {
@@ -293,14 +330,21 @@ const EventSidebar = React.memo(function EventSidebar({
                 },
               }}
             >
-              {/* Create Event Button */}
-              <MenuItem
-                icon={<Plus className="h-4 w-4" />}
-                component={<Link href="/event-setup" />}
-              >
-                {!collapsed && 'Create Event'}
-              </MenuItem>
-
+              {/* Hamburger Menu */}
+              <div className="flex justify-center p-2">
+                <button
+                  onClick={onToggleCollapsed}
+                  className="p-1 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Toggle sidebar"
+                >
+                  <div className="flex flex-col space-y-0.5 sm:space-y-1">
+                    <div className={`w-5 h-1 sm:w-6 sm:h-1 rounded-full ${isTeamMode ? 'bg-[#10B981]' : 'bg-[#F59E0B]'}`}></div>
+                    <div className={`w-5 h-1 sm:w-6 sm:h-1 rounded-full ${isTeamMode ? 'bg-[#3B82F6]' : 'bg-[#EF4444]'}`}></div>
+                    <div className={`w-5 h-1 sm:w-6 sm:h-1 rounded-full ${isTeamMode ? 'bg-[#8B5CF6]' : 'bg-[#EC4899]'}`}></div>
+                  </div>
+                </button>
+              </div>
+              
               {/* Events List */}
               <div className="p-2">
                 {isLoading ? (
@@ -314,11 +358,7 @@ const EventSidebar = React.memo(function EventSidebar({
                     {!collapsed && (
                       <>
                         <h4 className="text-sm font-medium text-gray-900 mb-1">No events yet</h4>
-                        <p className="text-xs text-gray-600 mb-3">Create your first event to get started</p>
-                        <Link href="/event-setup" className="btn-primary text-sm px-3 py-1">
-                          <Plus className="h-3 w-3 mr-1" />
-                            Create Event
-                        </Link>
+                        <p className="text-xs text-gray-600">Use the + button to create your first event</p>
                       </>
                     )}
                   </div>
